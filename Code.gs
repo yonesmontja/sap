@@ -95,7 +95,9 @@ function initDatabase() {
       sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#3f51b5").setFontColor("#ffffff");
       sheet.setFrozenRows(1);
 
-      if (sheetName === 'Users') sheet.appendRow(['guru', '12345', 'guru', 'Administrator']);
+      // Akun admin awal dengan password acak. Lihat password-nya langsung di sheet 'Users'
+      // (hanya pemilik spreadsheet yang bisa membukanya), lalu segera ganti.
+      if (sheetName === 'Users') sheet.appendRow(['admin', Utilities.getUuid().substring(0, 8), 'admin', 'Administrator']);
       if (sheetName === 'MasterPeriode') sheet.appendRow(['PER-1', '2026/2027', 'Ganjil', 'AKTIF']);
       if (sheetName === 'MasterMBK') {
         sheet.appendRow(['JEN-1', 'Proses/Harian', 'Rata-rata Harian']);
@@ -103,7 +105,7 @@ function initDatabase() {
         sheet.appendRow(['JEN-3', 'UAS/PAS', 'Akhir Semester']);
       }
       if (sheetName === 'PengaturanSekolah') {
-        sheet.appendRow(['SET-1', 'SD Sekolah Kita', 'Jl. Pendidikan No. 1, Papua', 'Jayapura', 'Nama Kepsek, S.Pd', '198001012005011001', '75']);
+        sheet.appendRow(['SET-1', 'SD Sekolah Kita', 'Jl. Pendidikan No. 1, Papua', 'Jayapura', 'Nama Kepsek, S.Pd', '', '75']);
       }
     }
   }
@@ -306,7 +308,41 @@ function verifyUser(u, p, r) {
   }
 }
 
+// ==============================================================================
+// PENYARINGAN DATA SENSITIF SEBELUM DIKIRIM KE BROWSER
+// Password user dan API key tidak boleh keluar dari server. API key hanya
+// ditampilkan dalam bentuk tersamar (contoh: ••••••••abcd).
+// ==============================================================================
+const API_KEY_MASK_PREFIX = '••••••••';
+
+function maskApiKey_(key) {
+  key = String(key || '').trim();
+  if (!key) return '';
+  return API_KEY_MASK_PREFIX + key.slice(-4);
+}
+
+function sanitizeRows_(sheetName, rows) {
+  if (sheetName === 'Users') {
+    return rows.map(r => { let o = Object.assign({}, r); delete o.password; return o; });
+  }
+  if (sheetName === 'PengaturanSekolah') {
+    return rows.map(r => Object.assign({}, r, { api_key_gemini: maskApiKey_(r.api_key_gemini) }));
+  }
+  return rows;
+}
+
+// Versi publik (dipanggil dari browser): tanpa tabel Users, API key tersamar.
 function getRelationalData() {
+  let db = getRelationalDataRaw_();
+  delete db.Users;
+  for (const sheetName of Object.keys(db)) {
+    db[sheetName] = sanitizeRows_(sheetName, db[sheetName]);
+  }
+  return db;
+}
+
+// Versi internal server (akhiran "_" membuatnya tidak bisa dipanggil dari browser).
+function getRelationalDataRaw_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let db = {};
   for (const sheetName of Object.keys(TABLES)) {
@@ -336,7 +372,7 @@ function fetchTableData_(sheetName) {
   const headers = data.shift();
   const timezone = Session.getScriptTimeZone();
 
-  return data.map(row => {
+  const rows = data.map(row => {
     let obj = {};
     headers.forEach((h, i) => {
       if (row[i] instanceof Date) {
@@ -347,11 +383,17 @@ function fetchTableData_(sheetName) {
     });
     return obj;
   });
+  return sanitizeRows_(sheetName, rows);
 }
 
-function getMasterReferences() {
+// Data keluarga (nama & pekerjaan orang tua/wali) hanya dikirim jika diminta
+// secara eksplisit oleh halaman yang membutuhkannya (master_siswa).
+const KELUARGA_TABLES = ['MasterOrtu', 'MasterWali'];
+
+function getMasterReferences(includeKeluarga) {
   let db = {};
   STATIC_TABLES.forEach(tbl => {
+    if (!includeKeluarga && KELUARGA_TABLES.includes(tbl)) { db[tbl] = []; return; }
     db[tbl] = fetchTableData_(tbl);
   });
   return db;
@@ -598,6 +640,16 @@ function saveMasterData(sheetName, record, idField, oldId) {
 
     if (headers.includes('timestamp_simpan')) {
       record['timestamp_simpan'] = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
+    }
+
+    // API key dikirim ke browser dalam bentuk tersamar; jika form mengembalikannya
+    // tanpa diubah (atau kosong), pertahankan nilai asli di spreadsheet.
+    if (sheetName === 'PengaturanSekolah' && rowIndex !== -1) {
+      let idxKey = headers.indexOf('api_key_gemini');
+      let sentKey = String(record.api_key_gemini || '').trim();
+      if (idxKey > -1 && (sentKey === '' || sentKey.startsWith(API_KEY_MASK_PREFIX))) {
+        record.api_key_gemini = data[rowIndex - 1][idxKey];
+      }
     }
 
     let rowData = headers.map(h => record[h] !== undefined ? record[h] : "");
@@ -949,7 +1001,7 @@ function saveBankPengetahuan(dataObj) {
 function kalkulasiOtomatisP5(id_periode, id_kelas, id_proyek) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const db = getRelationalData();
+    const db = getRelationalDataRaw_();
 
     let targetList = (db.MasterTargetP5 || []).filter(t => String(t.id_proyek) === String(id_proyek));
     let siswaList = (db.MasterSiswa || []).filter(s => String(s.id_kelas) === String(id_kelas));
@@ -1301,7 +1353,7 @@ function analyzeJurnalWithClaude(narasi) {
 // BLOK 1-C: MESIN AI - ANALISIS JURNAL DENGAN GEMINI
 // ==============================================================================
 function analyzeJurnalWithGemini(narasi) {
-  const db = getRelationalData();
+  const db = getRelationalDataRaw_();
   let settings = (db.PengaturanSekolah && db.PengaturanSekolah.length > 0) ? db.PengaturanSekolah[0] : {};
   let propertyKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   let apiKey = propertyKey || settings.api_key_gemini;
@@ -1462,7 +1514,7 @@ function saveJurnalAnekdotal(record) {
 // ==============================================================================
 function generateCatatanAI(id_siswa, id_periode, aiMode = 'GEMINI') {
   try {
-    const db = getRelationalData();
+    const db = getRelationalDataRaw_();
     let siswa = (db.MasterSiswa || []).find(s => String(s.id_siswa) === String(id_siswa));
     let namaSiswa = siswa ? siswa.nama_siswa : "Peserta didik";
 
@@ -1571,7 +1623,7 @@ function saveCatatanWaliFinal(record) {
 // ==============================================================================
 function generateCatatanP5_AI(id_siswa, id_proyek, id_periode, drafKasar, aiMode = 'GEMINI') {
   try {
-    const db = getRelationalData();
+    const db = getRelationalDataRaw_();
     let siswa = (db.MasterSiswa || []).find(s => String(s.id_siswa) === String(id_siswa));
     let namaSiswa = siswa ? siswa.nama_siswa : "Peserta didik";
     let proyek = (db.MasterProyek || []).find(p => String(p.id_proyek) === String(id_proyek));
@@ -1792,7 +1844,7 @@ function getWeekLabel(dateString) {
 
 function getLaporanSTNKM(id_kelas, id_periode, startDateParam) {
   try {
-    const db = getRelationalData();
+    const db = getRelationalDataRaw_();
 
     // 1. Tentukan Titik Awal Minggu 1 (Berdasarkan input atau tahun ajaran aktif)
     let startDate = new Date();

@@ -239,7 +239,7 @@
             hideL(); 
         })
         .withFailureHandler(err => { hideL(); Swal.fire('Error Database', err.message, 'error'); })
-        .getMasterReferences();
+        .getMasterReferences(true); // true = ikut sertakan data Ortu/Wali untuk form siswa
     }
 
     function initUI() {
