@@ -239,22 +239,27 @@
         currentPage = location.parameter.page;
       }
 
-      if (!user.role) {
-        window.top.location.href = SCRIPT_URL + "?page=login";
-        return;
-      }
-      if (!isPageAllowed(currentPage)) {
+      // Sandbox Apps Script hanya mengizinkan pindah halaman (window.top) setelah
+      // tindakan pengguna (klik). Timer/redirect otomatis diblokir browser, jadi wajib klik.
+      const blockPage = (title, text, btnText, targetPage) => {
         // Sembunyikan isi halaman, tetapi biarkan pesan SweetAlert tetap terlihat
         let guardStyle = document.createElement('style');
         guardStyle.textContent = 'body > *:not(.swal2-container) { visibility: hidden !important; }';
         document.head.appendChild(guardStyle);
-        const goDashboard = () => { window.top.location.href = SCRIPT_URL + "?page=dashboard"; };
         Swal.fire({
-          icon: 'error', title: 'Akses Ditolak',
-          text: 'Peran Anda tidak memiliki akses ke halaman ini. Mengalihkan ke Dashboard...',
-          timer: 2500, timerProgressBar: true, allowOutsideClick: false
-        }).then(goDashboard);
-        setTimeout(goDashboard, 4000); // cadangan jika pesan gagal tampil
+          icon: 'error', title: title, text: text, confirmButtonText: btnText,
+          allowOutsideClick: false, allowEscapeKey: false
+        }).then(() => { window.top.location.href = SCRIPT_URL + "?page=" + targetPage; });
+      };
+
+      if (!user.role) {
+        blockPage('Sesi Berakhir', 'Silakan login terlebih dahulu.',
+          '<i class="fa-solid fa-right-to-bracket me-1"></i> Ke Halaman Login', 'login');
+        return;
+      }
+      if (!isPageAllowed(currentPage)) {
+        blockPage('Akses Ditolak', 'Peran Anda tidak memiliki akses ke halaman ini.',
+          '<i class="fa-solid fa-house me-1"></i> Kembali ke Dashboard', 'dashboard');
         return;
       }
       if (currentPage === 'profil') currentPage = 'dashboard'; 
