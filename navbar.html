@@ -244,10 +244,17 @@
         return;
       }
       if (!isPageAllowed(currentPage)) {
-        document.body.style.visibility = 'hidden';
-        Swal.fire('Akses Ditolak', 'Peran Anda tidak memiliki akses ke halaman ini.', 'error').then(() => {
-          window.top.location.href = SCRIPT_URL + "?page=dashboard";
-        });
+        // Sembunyikan isi halaman, tetapi biarkan pesan SweetAlert tetap terlihat
+        let guardStyle = document.createElement('style');
+        guardStyle.textContent = 'body > *:not(.swal2-container) { visibility: hidden !important; }';
+        document.head.appendChild(guardStyle);
+        const goDashboard = () => { window.top.location.href = SCRIPT_URL + "?page=dashboard"; };
+        Swal.fire({
+          icon: 'error', title: 'Akses Ditolak',
+          text: 'Peran Anda tidak memiliki akses ke halaman ini. Mengalihkan ke Dashboard...',
+          timer: 2500, timerProgressBar: true, allowOutsideClick: false
+        }).then(goDashboard);
+        setTimeout(goDashboard, 4000); // cadangan jika pesan gagal tampil
         return;
       }
       if (currentPage === 'profil') currentPage = 'dashboard'; 
