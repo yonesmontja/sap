@@ -49,9 +49,15 @@
     const SCRIPT_URL = "<?= scriptUrl ?>";
 
     // 2. Cek Sesi: Jika user sudah login (sesi belum dihapus browser), langsung lompat ke dashboard
-    if (sessionStorage.getItem('eduUser')) {
-       window.top.location.href = SCRIPT_URL + "?page=dashboard";
-    }
+    //    (Sesi lama tanpa token dari versi sebelumnya dibuang agar login ulang)
+    try {
+      let saved = JSON.parse(sessionStorage.getItem('eduUser') || 'null');
+      if (saved && saved.token) {
+        window.top.location.href = SCRIPT_URL + "?page=dashboard";
+      } else {
+        sessionStorage.removeItem('eduUser');
+      }
+    } catch (e) { sessionStorage.removeItem('eduUser'); }
 
     function showL(t="Memproses...") { 
       document.getElementById('loadingText').innerText = t; 
@@ -74,19 +80,9 @@
       google.script.run
         .withSuccessHandler(res => {
           if(res.success) {
+            // res.token = token sesi dari server. Log login dicatat oleh server.
             sessionStorage.setItem('eduUser', JSON.stringify(res));
-            
-            // CATAT LOG AKTIVITAS LOGIN
-            google.script.run
-              .withSuccessHandler(() => {
-                window.top.location.href = SCRIPT_URL + "?page=dashboard";
-              })
-              .saveLogAktivitasBatch([{
-                username: res.name || res.username,
-                role: res.role,
-                modul: 'Autentikasi',
-                aktivitas: `Login ke dalam sistem EduRapor.`
-              }]);
+            window.top.location.href = SCRIPT_URL + "?page=dashboard";
           } else { 
             hideL(); 
             Swal.fire({icon:'error', title: 'Gagal', text: res.message}); 

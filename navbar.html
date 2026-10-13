@@ -170,6 +170,77 @@
 </nav>
 
 <script>
+  // -------------------------------------------------------------
+  // 0. PEMBUNGKUS OTOMATIS google.script.run (TOKEN SESI)
+  // Semua panggilan google.script.run.namaFungsi(...) di halaman mana pun
+  // otomatis diteruskan ke pintu server api(token, namaFungsi, argumen).
+  // Kode halaman tidak perlu diubah.
+  // -------------------------------------------------------------
+  (function installEduApiProxy() {
+    if (!window.google || !google.script || !google.script.run || google.script.run.__eduProxy) return;
+
+    const desc = Object.getOwnPropertyDescriptor(google.script, 'run');
+    const baseRun = google.script.run;
+    const freshRun = () => (desc && desc.get) ? desc.get.call(google.script) : baseRun;
+    const RESERVED = ['then', 'toJSON', 'constructor', 'prototype', 'valueOf', 'toString'];
+    const noop = () => {};
+
+    function getToken() {
+      try { return (JSON.parse(sessionStorage.getItem('eduUser') || '{}')).token || ''; } catch (e) { return ''; }
+    }
+
+    let sessionAlertShown = false;
+    function handleSessionError() {
+      sessionStorage.removeItem('eduUser');
+      sessionStorage.removeItem('eduAppState');
+      if (sessionAlertShown) return;
+      sessionAlertShown = true;
+      let ov = document.getElementById('loadingOverlay');
+      if (ov) ov.style.display = 'none';
+      // Sandbox Apps Script hanya mengizinkan pindah halaman setelah klik pengguna.
+      Swal.fire({
+        icon: 'warning', title: 'Sesi Berakhir',
+        text: 'Sesi login Anda sudah berakhir atau tidak valid. Silakan login ulang.',
+        confirmButtonText: '<i class="fa-solid fa-right-to-bracket me-1"></i> Ke Halaman Login',
+        allowOutsideClick: false, allowEscapeKey: false
+      }).then(() => { window.top.location.href = SCRIPT_URL + "?page=login"; });
+    }
+
+    function makeRunner(state) {
+      return new Proxy({}, {
+        get(_, prop) {
+          if (prop === '__eduProxy') return true;
+          if (typeof prop !== 'string' || RESERVED.includes(prop)) return undefined;
+          if (prop === 'withSuccessHandler') return fn => makeRunner(Object.assign({}, state, { succ: fn }));
+          if (prop === 'withFailureHandler') return fn => makeRunner(Object.assign({}, state, { fail: fn }));
+          if (prop === 'withUserObject') return uo => makeRunner(Object.assign({}, state, { uo: uo, hasUo: true }));
+          return (...args) => {
+            let r = freshRun().withSuccessHandler(state.succ || noop);
+            if (state.hasUo) r = r.withUserObject(state.uo);
+            r.withFailureHandler((err, uo) => {
+              const msg = String((err && err.message) || err);
+              if (msg.indexOf('SESI_TIDAK_VALID') > -1) {
+                if (state.fail) { try { state.fail(err, uo); } catch (e) {} }
+                handleSessionError();
+                return;
+              }
+              if (state.fail) return state.fail(err, uo);
+              Swal.fire('Gagal', msg.replace('AKSES_DITOLAK: ', ''), 'error');
+            }).api(getToken(), prop, args);
+          };
+        }
+      });
+    }
+
+    const proxied = makeRunner({});
+    try {
+      Object.defineProperty(google.script, 'run', { get: () => proxied, configurable: true });
+    } catch (e) {
+      try { google.script.run = proxied; } catch (e2) {}
+    }
+    if (!google.script.run.__eduProxy) console.error('EduRapor: gagal memasang pembungkus keamanan google.script.run');
+  })();
+
   function navTo(page) {
     window.top.location.href = SCRIPT_URL + "?page=" + page;
   }
@@ -315,18 +386,16 @@
          let auditUser = cUser.name || cUser.username || "Unknown";
          
          // CATAT LOG AKTIVITAS LOGOUT
-         google.script.run
-           .withSuccessHandler(() => {
+         // Server mencatat log logout dan menghapus sesi
+         const keluar = () => {
               sessionStorage.removeItem('eduUser');
               sessionStorage.removeItem('eduAppState'); 
               window.top.location.href = SCRIPT_URL + "?page=login";
-           })
-           .saveLogAktivitasBatch([{
-              username: auditUser,
-              role: cUser.role || "Unknown",
-              modul: 'Autentikasi',
-              aktivitas: `Logout (keluar) dari sistem EduRapor.`
-           }]);
+         };
+         google.script.run
+           .withSuccessHandler(keluar)
+           .withFailureHandler(keluar)
+           .logoutSession();
       }
     });
   }

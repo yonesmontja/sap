@@ -111,7 +111,7 @@ function initDatabase() {
   }
 }
 
-function verifyUser(u, p, r) {
+function verifyUserCore_(u, p, r) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const targetRole = r ? String(r).toLowerCase().trim() : '';
@@ -332,7 +332,7 @@ function sanitizeRows_(sheetName, rows) {
 }
 
 // Versi publik (dipanggil dari browser): tanpa tabel Users, API key tersamar.
-function getRelationalData() {
+function getRelationalData_() {
   let db = getRelationalDataRaw_();
   delete db.Users;
   for (const sheetName of Object.keys(db)) {
@@ -390,7 +390,7 @@ function fetchTableData_(sheetName) {
 // secara eksplisit oleh halaman yang membutuhkannya (master_siswa).
 const KELUARGA_TABLES = ['MasterOrtu', 'MasterWali'];
 
-function getMasterReferences(includeKeluarga) {
+function getMasterReferences_(includeKeluarga) {
   let db = {};
   STATIC_TABLES.forEach(tbl => {
     if (!includeKeluarga && KELUARGA_TABLES.includes(tbl)) { db[tbl] = []; return; }
@@ -399,7 +399,7 @@ function getMasterReferences(includeKeluarga) {
   return db;
 }
 
-function getDashboardMetrics() {
+function getDashboardMetrics_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return {
     totalSiswa: Math.max(0, (ss.getSheetByName('MasterSiswa')?.getLastRow() || 1) - 1),
@@ -415,8 +415,8 @@ function getDashboardMetrics() {
  * Lazy Loading: Klien mengirimkan ID Kelas & ID Periode, Server memfilter 
  * jutaan baris dan hanya mereturn data yang relevan dengan kelas tersebut.
  */
-function getTransactionalDataByContext(id_kelas, id_periode, includeP5 = false) {
-  let db = getMasterReferences(); // Tarik metadata dasar
+function getTransactionalDataByContext_(id_kelas, id_periode, includeP5 = false) {
+  let db = getMasterReferences_(); // Tarik metadata dasar
 
   let allNilai = fetchTableData_('TransNilai');
   db.TransNilai = allNilai.filter(n => String(n.id_kelas) === String(id_kelas) && String(n.id_periode) === String(id_periode));
@@ -452,7 +452,7 @@ function getTransactionalDataByContext(id_kelas, id_periode, includeP5 = false) 
   return db;
 }
 
-function getPaginatedMasterTable(tableName, page = 1, limit = 10, searchQuery = "", sortCol = "", sortAsc = true, schema = null) {
+function getPaginatedMasterTable_(tableName, page = 1, limit = 10, searchQuery = "", sortCol = "", sortAsc = true, schema = null) {
   let records = fetchTableData_(tableName);
 
   let relatedData = {};
@@ -532,12 +532,12 @@ function getPaginatedMasterTable(tableName, page = 1, limit = 10, searchQuery = 
   };
 }
 
-function getExportMasterData(tableName, searchQuery = "", sortCol = "", sortAsc = true, schema = null) {
-  return getPaginatedMasterTable(tableName, 1, 999999, searchQuery, sortCol, sortAsc, schema).data;
+function getExportMasterData_(tableName, searchQuery = "", sortCol = "", sortAsc = true, schema = null) {
+  return getPaginatedMasterTable_(tableName, 1, 999999, searchQuery, sortCol, sortAsc, schema).data;
 }
 
-function getDashboardChartData() {
-  const db = getMasterReferences();
+function getDashboardChartData_() {
+  const db = getMasterReferences_();
   const allNilai = fetchTableData_('TransNilai').filter(n => n.tanggal && !isNaN(Number(n.nilai)));
 
   allNilai.sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
@@ -618,7 +618,7 @@ function getDashboardChartData() {
   };
 }
 
-function saveMasterData(sheetName, record, idField, oldId) {
+function saveMasterData_(sheetName, record, idField, oldId) {
   try {
     let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
     let data = sheet.getDataRange().getValues();
@@ -667,7 +667,7 @@ function saveMasterData(sheetName, record, idField, oldId) {
 // ==============================================================================
 // BLOK PERBAIKAN: FUNGSI DELETE MASTER DATA YANG LEBIH TANGGUH
 // ==============================================================================
-function deleteMasterData(sheetName, idValue, idField) {
+function deleteMasterData_(sheetName, idValue, idField) {
   try {
     let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
     if (!sheet) return { success: false, message: "Tabel " + sheetName + " tidak ditemukan." };
@@ -717,7 +717,7 @@ function deleteMasterData(sheetName, idValue, idField) {
 // ==============================================================================
 // BLOK PERBAIKAN: FUNGSI MENGHAPUS JURNAL
 // ==============================================================================
-function deleteJurnalDanLampiran(id_jurnal, lampiran_url) {
+function deleteJurnalDanLampiran_(id_jurnal, lampiran_url) {
   try {
     // 1. Eksekusi hapus file dari Google Drive (Jika ada)
     if (lampiran_url && lampiran_url.includes('drive.google.com')) {
@@ -733,8 +733,8 @@ function deleteJurnalDanLampiran(id_jurnal, lampiran_url) {
     }
 
     // 2. Eksekusi hapus data teks di Spreadsheet
-    // (Memanggil deleteMasterData yang sudah kita perkuat di atas)
-    return deleteMasterData('TransJurnal', id_jurnal, 'id_jurnal');
+    // (Memanggil deleteMasterData_ yang sudah kita perkuat di atas)
+    return deleteMasterData_('TransJurnal', id_jurnal, 'id_jurnal');
 
   } catch (e) {
     return { success: false, message: e.message };
@@ -743,7 +743,7 @@ function deleteJurnalDanLampiran(id_jurnal, lampiran_url) {
 
 
 
-function saveRekapBatch(records) {
+function saveRekapBatch_(records) {
   try {
     if (!records || records.length === 0) return { success: false, message: "Tidak ada data untuk disimpan." };
 
@@ -774,7 +774,7 @@ function saveRekapBatch(records) {
   } catch (err) { return { success: false, message: err.toString() }; }
 }
 
-function savePresensiBatch(records) {
+function savePresensiBatch_(records) {
   try {
     if (!records || records.length === 0) return { success: false, message: "Tidak ada data presensi." };
 
@@ -810,7 +810,7 @@ function savePresensiBatch(records) {
   } catch (err) { return { success: false, message: err.toString() }; }
 }
 
-function saveNilaiBatch(records) {
+function saveNilaiBatch_(records) {
   try {
     if (!records || records.length === 0) return { success: false, message: 'Tidak ada data nilai yang dikirim.' };
 
@@ -931,7 +931,7 @@ function saveNilaiBatch(records) {
   }
 }
 
-function saveCatatanP5Batch(records) {
+function saveCatatanP5Batch_(records) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('TransCatatanP5');
@@ -964,7 +964,7 @@ function saveCatatanP5Batch(records) {
   }
 }
 
-function saveBankPengetahuan(dataObj) {
+function saveBankPengetahuan_(dataObj) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('MasterBankPengetahuan');
@@ -998,7 +998,7 @@ function saveBankPengetahuan(dataObj) {
   }
 }
 
-function kalkulasiOtomatisP5(id_periode, id_kelas, id_proyek) {
+function kalkulasiOtomatisP5_(id_periode, id_kelas, id_proyek) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const db = getRelationalDataRaw_();
@@ -1091,7 +1091,7 @@ function kalkulasiOtomatisP5(id_periode, id_kelas, id_proyek) {
   }
 }
 
-function uploadFileToDrive(base64Data, fileName, mimeType) {
+function uploadFileToDrive_(base64Data, fileName, mimeType) {
   try {
     let folderName = "Lampiran_Jurnal_EduRapor";
     let folders = DriveApp.getFoldersByName(folderName);
@@ -1112,7 +1112,7 @@ function uploadFileToDrive(base64Data, fileName, mimeType) {
 // ==============================================================================
 // BLOK 1: MESIN AI - ANALISIS JURNAL DENGAN QWEN
 // ==============================================================================
-function analyzeJurnalWithQwen(narasi) {
+function analyzeJurnalWithQwen_(narasi) {
   try {
     let apiKey = PropertiesService.getScriptProperties().getProperty("OPENROUTER_API_KEY");
 
@@ -1190,7 +1190,7 @@ function analyzeJurnalWithQwen(narasi) {
 // ==============================================================================
 // BLOK 1-D: MESIN AI - ANALISIS JURNAL DENGAN DEEPSEEK
 // ==============================================================================
-function analyzeJurnalWithDeepSeek(narasi) {
+function analyzeJurnalWithDeepSeek_(narasi) {
   try {
     // 1. Ambil API Key dari Script Properties
     let apiKey = PropertiesService.getScriptProperties().getProperty("DEEPSEEK_API_KEY");
@@ -1283,7 +1283,7 @@ function analyzeJurnalWithDeepSeek(narasi) {
 // ==============================================================================
 // BLOK 1-B: MESIN AI - ANALISIS JURNAL DENGAN CLAUDE
 // ==============================================================================
-function analyzeJurnalWithClaude(narasi) {
+function analyzeJurnalWithClaude_(narasi) {
   try {
     let apiKey = PropertiesService.getScriptProperties().getProperty("CLAUDE_API_KEY");
     if (!apiKey) return { success: false, message: "API Key Claude belum dikonfigurasi di Script Properties." };
@@ -1352,7 +1352,7 @@ function analyzeJurnalWithClaude(narasi) {
 // ==============================================================================
 // BLOK 1-C: MESIN AI - ANALISIS JURNAL DENGAN GEMINI
 // ==============================================================================
-function analyzeJurnalWithGemini(narasi) {
+function analyzeJurnalWithGemini_(narasi) {
   const db = getRelationalDataRaw_();
   let settings = (db.PengaturanSekolah && db.PengaturanSekolah.length > 0) ? db.PengaturanSekolah[0] : {};
   let propertyKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
@@ -1411,7 +1411,7 @@ function analyzeJurnalWithGemini(narasi) {
 // ==============================================================================
 // BLOK 1-D: MESIN AI - ANALISIS JURNAL DENGAN OPENKEY
 // ==============================================================================
-function analyzeJurnalWithOpenkey(narasi) {
+function analyzeJurnalWithOpenkey_(narasi) {
   try {
     // 1. Ambil API Key dari Script Properties
     let apiKey = PropertiesService.getScriptProperties().getProperty("OPENKEY_API_KEY");
@@ -1501,18 +1501,18 @@ function analyzeJurnalWithOpenkey(narasi) {
   }
 }
 
-function updateJurnalAnekdotal(record) {
-  return saveJurnalAnekdotal(record);
+function updateJurnalAnekdotal_(record) {
+  return saveJurnalAnekdotal_(record);
 }
 
-function saveJurnalAnekdotal(record) {
-  return saveMasterData('TransJurnal', record, 'id_jurnal', record.id_jurnal);
+function saveJurnalAnekdotal_(record) {
+  return saveMasterData_('TransJurnal', record, 'id_jurnal', record.id_jurnal);
 }
 
 // ==============================================================================
 // BLOK 2: SINTESIS CATATAN WALI KELAS (TRI-MODE: GEMINI, QWEN, CLAUDE)
 // ==============================================================================
-function generateCatatanAI(id_siswa, id_periode, aiMode = 'GEMINI') {
+function generateCatatanAI_(id_siswa, id_periode, aiMode = 'GEMINI') {
   try {
     const db = getRelationalDataRaw_();
     let siswa = (db.MasterSiswa || []).find(s => String(s.id_siswa) === String(id_siswa));
@@ -1592,7 +1592,7 @@ function generateCatatanAI(id_siswa, id_periode, aiMode = 'GEMINI') {
   }
 }
 
-function saveCatatanWaliFinal(record) {
+function saveCatatanWaliFinal_(record) {
   try {
     let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TransCatatanWali');
     let data = sheet.getDataRange().getValues();
@@ -1621,7 +1621,7 @@ function saveCatatanWaliFinal(record) {
 // ==============================================================================
 // BLOK 3: SINTESIS CATATAN P5 (TRI-MODE: GEMINI, QWEN, CLAUDE)
 // ==============================================================================
-function generateCatatanP5_AI(id_siswa, id_proyek, id_periode, drafKasar, aiMode = 'GEMINI') {
+function generateCatatanP5_AI_(id_siswa, id_proyek, id_periode, drafKasar, aiMode = 'GEMINI') {
   try {
     const db = getRelationalDataRaw_();
     let siswa = (db.MasterSiswa || []).find(s => String(s.id_siswa) === String(id_siswa));
@@ -1705,7 +1705,7 @@ function generateCatatanP5_AI(id_siswa, id_proyek, id_periode, drafKasar, aiMode
   }
 }
 
-function arsipkanDatabaseTahunan() {
+function arsipkanDatabaseTahunan_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const timeString = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd_HH-mm");
@@ -1736,7 +1736,7 @@ function arsipkanDatabaseTahunan() {
 // ==============================================================================
 // BLOK AUDIT TRAIL / LOG AKTIVITAS
 // ==============================================================================
-function saveLogAktivitasBatch(logs) {
+function saveLogAktivitasBatch_(logs) {
   try {
     if (!logs || logs.length === 0) return { success: false };
     let ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1763,7 +1763,7 @@ function saveLogAktivitasBatch(logs) {
   }
 }
 
-function getPaginatedLogAktivitas(page = 1, limit = 10, searchQuery = "", sortCol = "timestamp", sortAsc = false) {
+function getPaginatedLogAktivitas_(page = 1, limit = 10, searchQuery = "", sortCol = "timestamp", sortAsc = false) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TransLogAktivitas');
   if (!sheet) return { data: [], totalRows: 0, totalPages: 1, currentPage: page };
 
@@ -1811,8 +1811,8 @@ function getPaginatedLogAktivitas(page = 1, limit = 10, searchQuery = "", sortCo
   };
 }
 
-function getExportLogAktivitas(searchQuery = "", sortCol = "timestamp", sortAsc = false) {
-  return getPaginatedLogAktivitas(1, 999999, searchQuery, sortCol, sortAsc).data;
+function getExportLogAktivitas_(searchQuery = "", sortCol = "timestamp", sortAsc = false) {
+  return getPaginatedLogAktivitas_(1, 999999, searchQuery, sortCol, sortAsc).data;
 }
 // ==============================================================================
 // TAMBAHAN BACKEND: MODUL LAPORAN STNKM
@@ -1842,7 +1842,7 @@ function getWeekLabel(dateString) {
 // TAMBAHAN BACKEND: MODUL LAPORAN STNKM (REVISI ISO 8601 & CENTERED MONTHS)
 // ==============================================================================
 
-function getLaporanSTNKM(id_kelas, id_periode, startDateParam) {
+function getLaporanSTNKM_(id_kelas, id_periode, startDateParam) {
   try {
     const db = getRelationalDataRaw_();
 
@@ -2010,7 +2010,7 @@ function getLaporanSTNKM(id_kelas, id_periode, startDateParam) {
 // ==============================================================================
 // FUNGSI SIMPAN JURNAL MASSAL (BULK IMPORT DARI EXCEL)
 // ==============================================================================
-function saveJurnalBatch(records) {
+function saveJurnalBatch_(records) {
   try {
     if (!records || records.length === 0) return { success: false, message: 'Tidak ada data jurnal yang dikirim.' };
 
@@ -2055,7 +2055,7 @@ function saveJurnalBatch(records) {
 // ==============================================================================
 // FUNGSI SINKRONISASI ULANG STNKM (KOREKSI AUTO-PERIODE & MASTER MBK)
 // ==============================================================================
-function sinkronisasiUlangSTNKM() {
+function sinkronisasiUlangSTNKM_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheetTrans = ss.getSheetByName('TransNilai');
@@ -2142,7 +2142,7 @@ function sinkronisasiUlangSTNKM() {
     return { success: false, message: e.message };
   }
 }
-function deleteJadwalBerantai(actionMode, idJadwal, idGroup, tglAcuan) {
+function deleteJadwalBerantai_(actionMode, idJadwal, idGroup, tglAcuan) {
   try {
     let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TransJadwal');
     let data = sheet.getDataRange().getValues();
@@ -2181,7 +2181,7 @@ function deleteJadwalBerantai(actionMode, idJadwal, idGroup, tglAcuan) {
 // ==============================================================================
 // FUNGSI UPDATE JADWAL BERANTAI (RIPPLE EDIT)
 // ==============================================================================
-function updateJadwalBerantai(editMode, record, tglAcuan) {
+function updateJadwalBerantai_(editMode, record, tglAcuan) {
   try {
     let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TransJadwal');
     let data = sheet.getDataRange().getValues();
