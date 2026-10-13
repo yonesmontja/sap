@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laporan STNKM - EduRapor</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { background-color: #f0f2f5; font-family: sans-serif; }
+    #loadingOverlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.95); z-index: 9999;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+    }
+    .chart-container { height: 450px; position: relative; width: 100%; background: #fff; border-radius: 10px; padding: 15px;}
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { background-color: #e2e6ea; }
+    .filter-group { background: #f8f9fa; border-radius: 8px; padding: 10px; border: 1px solid #dee2e6; }
+    
+    .multi-select-dropdown { position: relative; display: inline-block; width: 100%; }
+    .multi-select-button { 
+      width: 100%; text-align: left; background: #fff; border: 1px solid #ced4da; 
+      padding: 0.375rem 0.75rem; border-radius: 0.375rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+    }
+    .multi-select-panel {
+      display: none; position: absolute; top: 100%; left: 0; width: 100%; max-height: 250px; overflow-y: auto;
+      background: #fff; border: 1px solid #ced4da; border-radius: 0.375rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000;
+      padding: 10px; margin-top: 5px;
+    }
+    .multi-select-panel.show { display: block; }
+    .student-item { display: flex; align-items: center; margin-bottom: 5px; cursor: pointer; }
+    .student-item input { margin-right: 8px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <div id="loadingOverlay">
+    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+    <h5 class="mt-3 fw-bold text-primary" id="loadingText">Menyiapkan Laporan...</h5>
+  </div>
+
+  <script>const SCRIPT_URL = "<?= scriptUrl ?>";</script>
+  <?!= include('navbar'); ?>
+
+  <div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h3 class="fw-bold text-dark m-0"><i class="fa-solid fa-chart-line text-primary me-2"></i> Laporan Tren STNKM</h3>
+        <small class="text-muted">Visualisasi Poin Skill, Teori, Nalar, Karakter, Minat & Capaian B.Indo-Math Berdasarkan Waktu</small>
+      </div>
+    </div>
+
+    <!-- AREA FILTER UTAMA -->
+    <div class="card p-4 shadow-sm mb-4 border-top border-primary border-4 rounded-4">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="fw-bold text-primary mb-1">Kelas</label>
+          <select class="form-select border-primary fw-bold" id="f_kelas"></select>
+        </div>
+        <div class="col-md-4">
+          <label class="fw-bold text-primary mb-1">Periode Akademik</label>
+          <select class="form-select border-primary fw-bold" id="f_periode"></select>
+        </div>
+        <div class="col-md-2">
+          <label class="fw-bold text-primary mb-1" title="Tanggal awal hari masuk sekolah">Mulai Tahun Ajaran</label>
+          <input type="date" id="f_startdate" class="form-control border-primary fw-bold text-secondary">
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button class="btn btn-primary w-100 fw-bold shadow-sm" onclick="fetchLaporanData()">
+            <i class="fa-solid fa-magnifying-glass me-2"></i> Tampilkan
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PENGATURAN TAMPILAN GRAFIK & FILTER SISWA -->
+    <div class="card shadow-sm mb-4 border-0 rounded-4">
+      <div class="card-header bg-white border-bottom py-3">
+        
+        <div class="row align-items-center g-3">
+          <div class="col-md-3">
+             <h5 class="fw-bold text-dark m-0"><i class="fa-solid fa-chart-area me-2"></i> Grafik Tren Evaluasi</h5>
+          </div>
+          
+          <div class="col-md-9">
+            <div class="d-flex flex-wrap gap-2 justify-content-md-end align-items-center filter-group">
+               
+               <!-- FILTER MULTI-SELECT SISWA -->
+               <div class="multi-select-dropdown" style="width: 250px;">
+                 <button class="multi-select-button" type="button" onclick="toggleStudentDropdown()" id="btnStudentSelect">
+                   <span id="studentSelectText">Semua Siswa Terpilih</span>
+                   <i class="fa-solid fa-chevron-down text-muted small"></i>
+                 </button>
+                 <div class="multi-select-panel" id="panelStudentSelect">
+                   <input type="text" class="form-control form-control-sm mb-2" id="searchStudentFilter" placeholder="Cari siswa..." onkeyup="filterStudentList()">
+                   <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                     <button class="btn btn-xs btn-outline-primary" style="font-size: 11px;" onclick="selectAllStudents(true)">Pilih Semua</button>
+                     <button class="btn btn-xs btn-outline-danger" style="font-size: 11px;" onclick="selectAllStudents(false)">Kosongkan</button>
+                   </div>
+                   <div id="studentCheckboxesContainer"></div>
+                   <button class="btn btn-sm btn-primary w-100 mt-2 fw-bold" onclick="applyStudentFilter()">Terapkan Filter Siswa</button>
+                 </div>
+               </div>
+
+               <!-- FILTER RENTANG WAKTU -->
+               <div class="d-flex align-items-center border-start ps-2">
+                 <span class="small fw-bold text-muted me-1">Dari:</span>
+                 <select id="flt_start" class="form-select form-select-sm shadow-none border-secondary" style="width: 90px;" onchange="renderChartAndTable()"></select>
+               </div>
+               <div class="d-flex align-items-center">
+                 <span class="small fw-bold text-muted mx-1">S.d:</span>
+                 <select id="flt_end" class="form-select form-select-sm shadow-none border-secondary" style="width: 90px;" onchange="renderChartAndTable()"></select>
+               </div>
+               
+               <div class="d-flex align-items-center ms-1 border-start ps-2">
+                 <select id="flt_xaxis" class="form-select form-select-sm shadow-none border-secondary" style="width: 140px;" onchange="renderChartAndTable()">
+                    <option value="both">Sumbu: Minggu & Bulan</option>
+                    <option value="week">Sumbu: Hanya Minggu</option>
+                    <option value="month">Sumbu: Hanya Bulan</option>
+                 </select>
+               </div>
+               
+               <div class="dropdown ms-1">
+                 <button class="btn btn-sm btn-danger fw-bold dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                   <i class="fa-solid fa-download"></i>
+                 </button>
+                 <ul class="dropdown-menu shadow">
+                   <li><a class="dropdown-item fw-bold text-success" href="#" onclick="exportChartToExcel()"><i class="fa-solid fa-file-excel me-2"></i>Data Grafik (.xlsx)</a></li>
+                   <li><a class="dropdown-item fw-bold text-danger" href="#" onclick="exportChartToPDF()"><i class="fa-solid fa-file-pdf me-2"></i>Cetak Gambar (.pdf)</a></li>
+                 </ul>
+               </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="card-body">
+        <div class="chart-container">
+          <canvas id="stnkmChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- AREA TABEL AGREGASI SISWA -->
+    <div class="card shadow-sm border-0 rounded-4 p-4">
+      <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3">
+        <h5 class="fw-bold text-secondary m-0 mb-2 mb-md-0"><i class="fa-solid fa-users me-2"></i> Rekapitulasi Data Individu Siswa</h5>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-success fw-bold px-3" onclick="exportTableData('xlsx')"><i class="fa-solid fa-file-excel me-1"></i> Excel (.xlsx)</button>
+            <button class="btn btn-sm btn-info text-white fw-bold px-3" onclick="exportTableData('csv')"><i class="fa-solid fa-file-csv me-1"></i> CSV</button>
+            <button class="btn btn-sm btn-danger fw-bold px-3" onclick="exportTableData('pdf')"><i class="fa-solid fa-file-pdf me-1"></i> Cetak PDF</button>
+        </div>
+      </div>
+      <div class="row mb-3">
+        <div class="col-md-4">
+          <div class="input-group input-group-sm">
+            <span class="input-group-text bg-white text-primary border-secondary"><i class="fa-solid fa-magnifying-glass"></i></span>
+            <input type="text" class="form-control form-control-sm border-secondary" id="searchInput" placeholder="Cari nama siswa pada tabel..." oninput="handleSearch(this.value)">
+          </div>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover table-bordered text-center align-middle" style="font-size: 13px;">
+          <thead class="table-dark">
+            <tr>
+              <th width="5%">No</th>
+              <th class="sortable text-start" onclick="sortTable('nama_siswa')">Nama Siswa <i class="fa-solid fa-sort ms-1"></i></th>
+              <th class="sortable text-primary" onclick="sortTable('S')">Skill (S) <i class="fa-solid fa-sort ms-1"></i></th>
+              <th class="sortable text-danger" onclick="sortTable('T')">Teori (T) <i class="fa-solid fa-sort ms-1"></i></th>
+              <th class="sortable text-success" onclick="sortTable('N')">Nalar (N) <i class="fa-solid fa-sort ms-1"></i></th>
+              <th class="sortable" onclick="sortTable('K')" style="color:#e0a8ff;">Karakter (K) <i class="fa-solid fa-sort ms-1"></i></th>
+              <th class="sortable text-secondary" onclick="sortTable('M')">Minat (M) <i class="fa-solid fa-sort ms-1"></i></th>
+              <th class="sortable text-info" onclick="sortTable('BIndo')">B.Indo <i class="fa-solid fa-sort ms-1"></i></th>
+              <th class="sortable text-warning" onclick="sortTable('Math')">Math <i class="fa-solid fa-sort ms-1"></i></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-2">
+        <button class="btn btn-sm btn-outline-primary" id="btnPrev" onclick="changePage(-1)"><i class="fa-solid fa-chevron-left me-1"></i> Sebelumnya</button>
+        <span id="pageIndicator" class="text-muted fw-bold small">Halaman 1</span>
+        <button class="btn btn-sm btn-outline-primary" id="btnNext" onclick="changePage(1)">Selanjutnya <i class="fa-solid fa-chevron-right ms-1"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let DB_Master = {};
+    let RawLaporanData = { chartData: [], table: [], rawNilai: [], rawJurnal: [], maxWkNum: 1 }; 
+    let ActiveLaporanData = { chartData: [], table: [] }; 
+    let filteredChartDataArray = []; 
+    let chartInstance = null;
+    let startDateObj = null; // Menyimpan object Date kalender Wk1
+    
+    let currentPage = 1;
+    const rowsPerPage = 10;
+    let sortCol = 'nama_siswa';
+    let sortAsc = true;
+    let searchQuery = '';
+
+    let allStudentsList = [];
+    let selectedStudentIds = []; 
+
+    let failsafeTimer = setTimeout(() => {
+      let overlay = document.getElementById('loadingOverlay');
+      if (overlay) overlay.style.display = 'none';
+    }, 6000);
+
+    function showL(t="Memproses...") { 
+      let textEl = document.getElementById('loadingText');
+      if (textEl) textEl.innerText = t;
+      document.getElementById('loadingOverlay').style.display='flex'; 
+    }
+    function hideL() { 
+      document.getElementById('loadingOverlay').style.display='none'; 
+      if (failsafeTimer) clearTimeout(failsafeTimer);
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+      try {
+        let sessionData = sessionStorage.getItem('eduUser');
+        let user = sessionData ? JSON.parse(sessionData) : {};
+        if(!user.name && !user.username) { 
+          window.top.location.href = SCRIPT_URL + "?page=login"; 
+          return; 
+        }
+        
+        document.getElementById('f_startdate').value = "2026-07-13"; 
+        
+        document.addEventListener('click', function(event) {
+          let panel = document.getElementById('panelStudentSelect');
+          let btn = document.getElementById('btnStudentSelect');
+          if (panel && panel.classList.contains('show') && !panel.contains(event.target) && !btn.contains(event.target)) {
+            panel.classList.remove('show');
+          }
+        });
+
+        loadMasterData();
+      } catch (e) {
+        hideL();
+        Swal.fire('Error Sesi', 'Sesi login tidak valid. Harap login ulang.', 'error').then(() => {
+          window.top.location.href = SCRIPT_URL + "?page=login"; 
+        });
+      }
+    });
+
+    function loadMasterData() {
+      showL("Memuat Referensi Kelas...");
+      google.script.run
+        .withSuccessHandler(function(res) {
+          DB_Master = res || {};
+          let klsOpts = '<option value="">- Pilih Kelas -</option>';
+          (DB_Master.MasterKelas || []).forEach(k => { klsOpts += `<option value="${k.id_kelas}">${k.nama_kelas}</option>`; });
+          document.getElementById('f_kelas').innerHTML = klsOpts;
+
+          let perOpts = '<option value="">- Pilih Periode -</option>';
+          (DB_Master.MasterPeriode || []).forEach(p => { 
+            let sel = (p.status_aktif === 'AKTIF' || p.is_active === 'Y') ? 'selected' : '';
+            perOpts += `<option value="${p.id_periode}" ${sel}>${p.tahun_ajaran} (${p.semester})</option>`; 
+          });
+          document.getElementById('f_periode').innerHTML = perOpts;
+          hideL();
+        })
+        .withFailureHandler(function(err) { hideL(); Swal.fire('Error', err.message, 'error'); })
+        .getMasterReferences();
+    }
+
+    function fetchLaporanData() {
+      let idKls = document.getElementById('f_kelas').value;
+      let idPer = document.getElementById('f_periode').value;
+      let fStart = document.getElementById('f_startdate').value;
+      
+      if(!idKls || !idPer) { return Swal.fire('Peringatan', 'Silakan pilih Kelas dan Periode terlebih dahulu.', 'warning'); }
+
+      showL("Mengalkulasi Agregasi STNKM...");
+      google.script.run
+        .withSuccessHandler(function(res) {
+          hideL();
+          if(res.success) {
+            RawLaporanData = res;
+            
+            // Set Start Date untuk kalkulasi ulang di frontend
+            startDateObj = new Date(fStart || new Date().getFullYear() + "-07-13");
+            let day = startDateObj.getDay();
+            let diffToMonday = startDateObj.getDate() - day + (day === 0 ? -6 : 1);
+            startDateObj = new Date(startDateObj.setDate(diffToMonday));
+            startDateObj.setHours(0,0,0,0);
+            
+            allStudentsList = res.table.map(t => ({ id: t.id_siswa, name: t.nama_siswa }));
+            selectedStudentIds = allStudentsList.map(s => s.id); 
+            renderStudentDropdownList();
+            updateStudentSelectText();
+
+            ActiveLaporanData = JSON.parse(JSON.stringify(RawLaporanData));
+            
+            populateWeekFilters();
+            renderChartAndTable();
+          } else { Swal.fire('Gagal', res.message, 'error'); }
+        })
+        .withFailureHandler(function(err) { hideL(); Swal.fire('Error', err.message, 'error'); })
+        .getLaporanSTNKM(idKls, idPer, fStart);
+    }
+
+    function toggleStudentDropdown() {
+      document.getElementById('panelStudentSelect').classList.toggle('show');
+    }
+
+    function renderStudentDropdownList(filterText = "") {
+      let container = document.getElementById('studentCheckboxesContainer');
+      let html = '';
+      allStudentsList.forEach(s => {
+        if (filterText === "" || s.name.toLowerCase().includes(filterText.toLowerCase())) {
+          let checked = selectedStudentIds.includes(s.id) ? 'checked' : '';
+          html += `
+            <label class="student-item small">
+              <input type="checkbox" value="${s.id}" class="chk-student" ${checked}> ${s.name}
+            </label>
+          `;
+        }
+      });
+      container.innerHTML = html;
+    }
+
+    function filterStudentList() {
+      let val = document.getElementById('searchStudentFilter').value;
+      renderStudentDropdownList(val);
+    }
+
+    function selectAllStudents(isSelect) {
+      let checkboxes = document.querySelectorAll('.chk-student');
+      checkboxes.forEach(chk => chk.checked = isSelect);
+    }
+
+    function applyStudentFilter() {
+      let visibleCheckboxes = document.querySelectorAll('.chk-student');
+      let newSelection = [];
+      
+      if (document.getElementById('searchStudentFilter').value.trim() === "") {
+        visibleCheckboxes.forEach(chk => { if(chk.checked) newSelection.push(chk.value); });
+        selectedStudentIds = newSelection;
+      } else {
+        visibleCheckboxes.forEach(chk => {
+           let idx = selectedStudentIds.indexOf(chk.value);
+           if (chk.checked && idx === -1) selectedStudentIds.push(chk.value);
+           if (!chk.checked && idx !== -1) selectedStudentIds.splice(idx, 1);
+        });
+      }
+
+      if (selectedStudentIds.length === 0) {
+        Swal.fire('Peringatan', 'Anda harus memilih minimal satu siswa untuk dirender.', 'warning');
+        return;
+      }
+
+      updateStudentSelectText();
+      document.getElementById('panelStudentSelect').classList.remove('show');
+      
+      recalculateActiveData();
+    }
+
+    function updateStudentSelectText() {
+      let txt = document.getElementById('studentSelectText');
+      if (selectedStudentIds.length === allStudentsList.length) {
+        txt.innerText = "Semua Siswa Terpilih";
+      } else if (selectedStudentIds.length === 1) {
+        let s = allStudentsList.find(x => x.id === selectedStudentIds[0]);
+        txt.innerText = s ? s.name : "1 Siswa";
+      } else {
+        txt.innerText = `${selectedStudentIds.length} Siswa Terpilih`;
+      }
+    }
+
+    // --- REKALKULASI DATA MENTAH KETIKA FILTER SISWA BERUBAH ---
+    function recalculateActiveData() {
+      if (selectedStudentIds.length === allStudentsList.length) {
+         ActiveLaporanData = JSON.parse(JSON.stringify(RawLaporanData));
+      } else {
+         ActiveLaporanData.table = RawLaporanData.table.filter(t => selectedStudentIds.includes(t.id_siswa));
+         
+         // Kalkulasi Ulang Chart berdasarkan siswa yang terpilih
+         let filteredNilai = RawLaporanData.rawNilai.filter(n => selectedStudentIds.includes(String(n.id_siswa)));
+         let filteredJurnal = RawLaporanData.rawJurnal.filter(j => selectedStudentIds.includes(String(j.id_siswa)));
+         
+         let idBIndo = null, idMath = null;
+         (DB_Master.MasterMapel || []).forEach(m => {
+           let nama = String(m.nama_mapel).toLowerCase();
+           if (nama.includes('indonesia')) idBIndo = m.id_mapel;
+           if (nama.includes('matematika') || nama.includes('math')) idMath = m.id_mapel;
+         });
+         
+         let weeklyMap = {};
+         for (let i = 1; i <= RawLaporanData.maxWkNum; i++) {
+             let weekMidDate = new Date(startDateObj.getTime() + ((i - 1) * 7 * 24 * 60 * 60 * 1000) + (3 * 24 * 60 * 60 * 1000));
+             let months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+             let moLabel = months[weekMidDate.getMonth()] + "-" + String(weekMidDate.getFullYear()).slice(-2);
+             weeklyMap[i] = { weekNum: i, weekLabel: "Wk." + i, monthLabel: moLabel, S:0, T:0, N:0, K:0, M:0, cSTNKM:0, BIndo:0, cBIndo:0, Math:0, cMath:0 };
+         }
+
+         const getWkNum = (dateStr) => {
+            let d = new Date(dateStr);
+            if (isNaN(d.getTime())) {
+              let parts = String(dateStr).split('/');
+              if (parts.length === 3) d = new Date(parts[2], parts[1]-1, parts[0]); else d = new Date();
+            }
+            d.setHours(0,0,0,0);
+            let diffDays = Math.floor((d.getTime() - startDateObj.getTime()) / (1000 * 3600 * 24));
+            return Math.max(1, Math.floor(diffDays / 7) + 1); 
+         };
+
+         filteredNilai.forEach(r => {
+            let wkIdx = getWkNum(r.tanggal);
+            if (!weeklyMap[wkIdx]) return;
+            let val = parseFloat(r.nilai);
+            let s=parseFloat(r.poin_S)||0, t=parseFloat(r.poin_T)||0, n=parseFloat(r.poin_N)||0, k=parseFloat(r.poin_K)||0, m=parseFloat(r.poin_M)||0;
+            
+            if (s!==0 || t!==0 || n!==0 || k!==0 || m!==0) {
+               weeklyMap[wkIdx].S += s; weeklyMap[wkIdx].T += t; weeklyMap[wkIdx].N += n; weeklyMap[wkIdx].K += k; weeklyMap[wkIdx].M += m;
+               weeklyMap[wkIdx].cSTNKM++;
+            }
+            if (String(r.id_mapel) === String(idBIndo) && !isNaN(val)) { weeklyMap[wkIdx].BIndo += val; weeklyMap[wkIdx].cBIndo++; }
+            if (String(r.id_mapel) === String(idMath) && !isNaN(val)) { weeklyMap[wkIdx].Math += val; weeklyMap[wkIdx].cMath++; }
+         });
+
+         filteredJurnal.forEach(j => {
+            let wkIdx = getWkNum(j.tanggal);
+            if (!weeklyMap[wkIdx]) return;
+            let s=parseFloat(j.val_S)||0, t=parseFloat(j.val_T)||0, n=parseFloat(j.val_N)||0, k=parseFloat(j.val_K)||0, m=parseFloat(j.val_M)||0;
+            weeklyMap[wkIdx].S += s; weeklyMap[wkIdx].T += t; weeklyMap[wkIdx].N += n; weeklyMap[wkIdx].K += k; weeklyMap[wkIdx].M += m;
+            weeklyMap[wkIdx].cSTNKM++;
+         });
+
+         ActiveLaporanData.chartData = Object.values(weeklyMap).sort((a,b)=>a.weekNum-b.weekNum).map(d => {
+            let cS = d.cSTNKM > 0 ? d.cSTNKM : 1;
+            return {
+               weekNum: d.weekNum, weekLabel: d.weekLabel, monthLabel: d.monthLabel,
+               S: d.cSTNKM > 0 ? parseFloat((d.S / cS).toFixed(1)) : null,
+               T: d.cSTNKM > 0 ? parseFloat((d.T / cS).toFixed(1)) : null,
+               N: d.cSTNKM > 0 ? parseFloat((d.N / cS).toFixed(1)) : null,
+               K: d.cSTNKM > 0 ? parseFloat((d.K / cS).toFixed(1)) : null,
+               M: d.cSTNKM > 0 ? parseFloat((d.M / cS).toFixed(1)) : null,
+               BIndo: d.cBIndo > 0 ? parseFloat((d.BIndo / d.cBIndo).toFixed(1)) : null,
+               Math: d.cMath > 0 ? parseFloat((d.Math / d.cMath).toFixed(1)) : null
+            };
+         });
+      }
+      renderChartAndTable();
+    }
+
+    function populateWeekFilters() {
+      let data = ActiveLaporanData.chartData || [];
+      if (data.length === 0) return;
+      
+      let opts = '';
+      data.forEach(d => {
+         opts += `<option value="${d.weekNum}">${d.weekLabel} (${d.monthLabel})</option>`;
+      });
+
+      let fStart = document.getElementById('flt_start');
+      let fEnd = document.getElementById('flt_end');
+
+      let currentStart = fStart.value;
+      let currentEnd = fEnd.value;
+
+      fStart.innerHTML = opts;
+      fEnd.innerHTML = opts;
+
+      // Pertahankan pilihan jika memungkinkan
+      if (currentStart && document.querySelector(`#flt_start option[value="${currentStart}"]`)) fStart.value = currentStart;
+      else fStart.value = data[0].weekNum;            
+
+      if (currentEnd && document.querySelector(`#flt_end option[value="${currentEnd}"]`)) fEnd.value = currentEnd;
+      else fEnd.value = data[data.length-1].weekNum;  
+    }
+
+    function renderChartAndTable() {
+       renderChart();
+       currentPage = 1;
+       renderTable();
+    }
+
+    // --- PLUGIN KHUSUS: Menggambar garis batas tepat DI TENGAH antar bulan ---
+    const betweenMonthsGridPlugin = {
+      id: 'betweenMonthsGridPlugin',
+      beforeDraw: (chart, args, options) => {
+        const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+        
+        ctx.save();
+        ctx.beginPath();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)'; // Warna garis batas halus
+        
+        // Loop setiap titik x
+        for (let i = 0; i < x.ticks.length; i++) {
+            // Cek apakah bulan saat ini berbeda dengan bulan SEBELUMNYA
+            if (options.borderIndices.includes(i)) {
+               // Dapatkan pixel dari titik ini (i) dan titik sebelumnya (i-1)
+               let currentPixel = x.getPixelForTick(i);
+               let prevPixel = x.getPixelForTick(i - 1);
+               // Titik potong persis di tengah
+               let midPixel = (currentPixel + prevPixel) / 2;
+               
+               // Gambar garis mulai dari garis bawah sumbu-X (bottom) sepanjang 45px ke bawah (menembus label)
+               ctx.moveTo(midPixel, bottom);
+               ctx.lineTo(midPixel, bottom + 45); 
+            }
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    };
+
+    function renderChart() {
+      let rawData = ActiveLaporanData.chartData || [];
+      if (rawData.length === 0) return;
+
+      let start = parseInt(document.getElementById('flt_start').value);
+      let end = parseInt(document.getElementById('flt_end').value);
+      let axisMode = document.getElementById('flt_xaxis').value;
+
+      if (start > end) { let t = start; start = end; end = t; }
+
+      let filtered = rawData.filter(d => d.weekNum >= start && d.weekNum <= end);
+      filteredChartDataArray = filtered; 
+
+      let monthIndices = {};
+      let firstIdxOfNewMonth = []; 
+      let prevMonthCheck = "";
+
+      filtered.forEach((d, index) => {
+        if (!monthIndices[d.monthLabel]) monthIndices[d.monthLabel] = [];
+        monthIndices[d.monthLabel].push(index);
+        
+        if (d.monthLabel !== prevMonthCheck) {
+          if (index !== 0) firstIdxOfNewMonth.push(index); 
+          prevMonthCheck = d.monthLabel;
+        }
+      });
+
+      let centerIndices = [];
+      for (let month in monthIndices) {
+        let indices = monthIndices[month];
+        let mid = Math.floor(indices.length / 2);
+        centerIndices.push(indices[mid]);
+      }
+
+      let labels = filtered.map((d, index) => {
+         if (axisMode === 'both') {
+            let displayMonth = centerIndices.includes(index) ? d.monthLabel : "";
+            return [d.weekLabel, displayMonth]; 
+         }
+         if (axisMode === 'month') {
+            return centerIndices.includes(index) ? d.monthLabel : "";
+         }
+         return d.weekLabel;
+      });
+
+      let dsS = filtered.map(d => d.S);
+      let dsT = filtered.map(d => d.T);
+      let dsN = filtered.map(d => d.N);
+      let dsK = filtered.map(d => d.K);
+      let dsM = filtered.map(d => d.M);
+      let dsBIndo = filtered.map(d => d.BIndo);
+      let dsMath = filtered.map(d => d.Math);
+
+      let ctx = document.getElementById('stnkmChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+
+      Chart.register(betweenMonthsGridPlugin);
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Skill', data: dsS, borderColor: '#0d6efd', backgroundColor: '#0d6efd', tension: 0.1, spanGaps: true, pointStyle: 'circle', pointRadius: 6, borderWidth: 3 },
+            { label: 'Teori', data: dsT, borderColor: '#dc3545', backgroundColor: '#dc3545', tension: 0.1, spanGaps: true, pointStyle: 'rect', pointRadius: 6, borderWidth: 3 },
+            { label: 'Nalar', data: dsN, borderColor: '#198754', backgroundColor: '#198754', tension: 0.1, spanGaps: true, pointStyle: 'triangle', pointRadius: 7, borderWidth: 3 },
+            { label: 'Karakter', data: dsK, borderColor: '#6f42c1', backgroundColor: '#6f42c1', tension: 0.1, spanGaps: true, pointStyle: 'crossRot', pointRadius: 7, borderWidth: 3 },
+            { label: 'Minat', data: dsM, borderColor: '#6c757d', backgroundColor: '#6c757d', tension: 0.1, spanGaps: true, pointStyle: 'rectRounded', pointRadius: 6, borderWidth: 3 },
+            { label: 'B.Indo', data: dsBIndo, borderColor: '#0dcaf0', backgroundColor: '#0dcaf0', tension: 0.1, spanGaps: true, pointStyle: 'triangle', pointRadius: 7, borderWidth: 3, borderDash: [5, 5] },
+            { label: 'Math', data: dsMath, borderColor: '#fd7e14', backgroundColor: '#fd7e14', tension: 0.1, spanGaps: true, pointStyle: 'cross', pointRadius: 7, borderWidth: 3, borderDash: [5, 5] }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 10, font:{weight:'bold'} } },
+            tooltip: { mode: 'index', intersect: false },
+            // Mengirim array index pembatas ke plugin kustom kita
+            betweenMonthsGridPlugin: { borderIndices: firstIdxOfNewMonth }
+          },
+          scales: {
+            y: { 
+              beginAtZero: false, suggestedMax: 100, 
+              ticks: { font: {weight:'bold'} }, 
+              grid: { color: '#e9ecef', drawBorder: false } 
+            },
+            x: { 
+              grid: { display: false }, // GRID BAWAAN DIMATIKAN
+              ticks: { font: {weight:'bold'} } 
+            }
+          }
+        }
+      });
+    }
+
+    function handleSearch(val) { searchQuery = val.toLowerCase(); currentPage = 1; renderTable(); }
+    function sortTable(col) {
+      if (sortCol === col) sortAsc = !sortAsc;
+      else { sortCol = col; sortAsc = true; }
+      renderTable();
+    }
+    function changePage(dir) { currentPage += dir; renderTable(); }
+
+    function renderTable() {
+      let data = (ActiveLaporanData.table || []).slice();
+      let tbody = document.getElementById('tableBody');
+
+      if (searchQuery) {
+        data = data.filter(d => String(d.nama_siswa).toLowerCase().includes(searchQuery));
+      }
+
+      data.sort((a, b) => {
+        let vA = a[sortCol]; let vB = b[sortCol];
+        if (sortCol !== 'nama_siswa') { vA = parseFloat(vA)||0; vB = parseFloat(vB)||0; }
+        if (vA < vB) return sortAsc ? -1 : 1;
+        if (vA > vB) return sortAsc ? 1 : -1;
+        return 0;
+      });
+
+      let totalPages = Math.ceil(data.length / rowsPerPage) || 1;
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      let start = (currentPage - 1) * rowsPerPage;
+      let paginated = data.slice(start, start + rowsPerPage);
+
+      let html = "";
+      paginated.forEach((row, index) => {
+        html += `<tr>
+          <td>${start + index + 1}</td>
+          <td class="text-start fw-bold text-dark">${row.nama_siswa}<br><small class="text-muted fw-normal">${row.nisn}</small></td>
+          <td class="text-primary fw-bold">${row.S}</td>
+          <td class="text-danger fw-bold">${row.T}</td>
+          <td class="text-success fw-bold">${row.N}</td>
+          <td class="fw-bold" style="color:#6f42c1;">${row.K}</td>
+          <td class="text-secondary fw-bold">${row.M}</td>
+          <td class="text-info fw-bold bg-light">${row.BIndo}</td>
+          <td class="text-warning fw-bold bg-light">${row.Math}</td>
+        </tr>`;
+      });
+
+      if (paginated.length === 0) html = `<tr><td colspan="9" class="text-muted py-4">Data tidak ditemukan.</td></tr>`;
+
+      tbody.innerHTML = html;
+      document.getElementById('pageIndicator').innerText = `Halaman ${currentPage} dari ${totalPages}`;
+      document.getElementById('btnPrev').disabled = (currentPage === 1);
+      document.getElementById('btnNext').disabled = (currentPage === totalPages);
+    }
+
+    function exportTableData(format) {
+      let data = ActiveLaporanData.table || [];
+      if(data.length === 0) return Swal.fire('Kosong', 'Tidak ada data untuk diekspor.', 'info');
+      let klsName = document.getElementById('f_kelas').options[document.getElementById('f_kelas').selectedIndex].text;
+
+      if (format === 'csv') {
+        let csvContent = `data:text/csv;charset=utf-8,\uFEFFNISN,Nama Siswa,Skill(S),Teori(T),Nalar(N),Karakter(K),Minat(M),B.Indo,Math\n`;
+        data.forEach(r => {
+          csvContent += `"${r.nisn}","${r.nama_siswa}",${r.S},${r.T},${r.N},${r.K},${r.M},${r.BIndo},${r.Math}\n`;
+        });
+        let encodedUri = encodeURI(csvContent);
+        let link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Rekap_Siswa_STNKM_${klsName.replace(/ /g, '_')}.csv`);
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      }
+      else if (format === 'xlsx') {
+        let ws = XLSX.utils.json_to_sheet(data.map(r => ({
+          "NISN": r.nisn, 
+          "Nama Siswa": r.nama_siswa,
+          "Skill (S)": parseFloat(r.S), 
+          "Teori (T)": parseFloat(r.T), 
+          "Nalar (N)": parseFloat(r.N), 
+          "Karakter (K)": parseFloat(r.K), 
+          "Minat (M)": parseFloat(r.M), 
+          "Bahasa Indonesia": parseFloat(r.BIndo), 
+          "Matematika": parseFloat(r.Math)
+        })));
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Rekap Siswa");
+        XLSX.writeFile(wb, `Rekap_Siswa_STNKM_${klsName.replace(/ /g, '_')}.xlsx`);
+      }
+      else if (format === 'pdf') {
+        let printWin = window.open('', '', 'width=900,height=650');
+        let html = `<html><head><title>Cetak PDF Rekap STNKM - ${klsName}</title>
+          <style>
+            @page { margin: 15mm; }
+            body { font-family: sans-serif; font-size: 12px; }
+            h3 { text-align: center; margin-bottom: 3px; font-size: 18px; }
+            p { text-align: center; margin-top: 0px; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+            th, td { border: 1px solid #000; padding: 6px; text-align: center; }
+            th { background-color: #f2f2f2; font-weight: bold; }
+            td.nama { text-align: left; font-weight: bold; }
+          </style></head><body>
+          <h3>LEMBAR REKAPITULASI CAPAIAN STNKM & MATA PELAJARAN</h3>
+          <p>Kelas: ${klsName}</p>
+          <table>
+            <thead><tr><th>No</th><th>NISN</th><th>Nama Siswa</th><th>Skill</th><th>Teori</th><th>Nalar</th><th>Karakter</th><th>Minat</th><th>B.Indo</th><th>Math</th></tr></thead>
+            <tbody>`;
+        data.forEach((r, idx) => {
+          html += `<tr><td>${idx+1}</td><td>${r.nisn}</td><td class="nama">${r.nama_siswa}</td><td>${r.S}</td><td>${r.T}</td><td>${r.N}</td><td>${r.K}</td><td>${r.M}</td><td>${r.BIndo}</td><td>${r.Math}</td></tr>`;
+        });
+        html += `</tbody></table>
+          <script>setTimeout(() => { window.print(); window.close(); }, 500);<\/script>
+          </body></html>`;
+        printWin.document.write(html);
+        printWin.document.close();
+      }
+    }
+
+    function exportChartToExcel() {
+      if(filteredChartDataArray.length === 0) return Swal.fire('Kosong', 'Data grafik belum dirender.', 'warning');
+      let klsName = document.getElementById('f_kelas').options[document.getElementById('f_kelas').selectedIndex].text;
+      
+      let ws = XLSX.utils.json_to_sheet(filteredChartDataArray.map((r, i) => ({
+          "No": i + 1,
+          "Minggu Ke": r.weekNum,
+          "Label Minggu": r.weekLabel,
+          "Bulan": r.monthLabel,
+          "Skill (S)": r.S !== null ? r.S : "-",
+          "Teori (T)": r.T !== null ? r.T : "-",
+          "Nalar (N)": r.N !== null ? r.N : "-",
+          "Karakter (K)": r.K !== null ? r.K : "-",
+          "Minat (M)": r.M !== null ? r.M : "-",
+          "B.Indo": r.BIndo !== null ? r.BIndo : "-",
+          "Math": r.Math !== null ? r.Math : "-"
+      })));
+      let wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Data Grafik Mingguan");
+      XLSX.writeFile(wb, `Data_Grafik_STNKM_${klsName.replace(/ /g, '_')}.xlsx`);
+    }
+
+    function exportChartToPDF() {
+      if(!chartInstance) return Swal.fire('Kosong', 'Grafik belum dirender.', 'warning');
+      let canvas = document.getElementById('stnkmChart');
+      let imgData = canvas.toDataURL("image/png", 1.0);
+      let klsName = document.getElementById('f_kelas').options[document.getElementById('f_kelas').selectedIndex].text;
+      
+      let startWk = document.getElementById('flt_start').options[document.getElementById('flt_start').selectedIndex].text;
+      let endWk = document.getElementById('flt_end').options[document.getElementById('flt_end').selectedIndex].text;
+
+      let printWin = window.open('', '', 'width=1000,height=700');
+      let html = `<html><head><title>Grafik STNKM - ${klsName}</title>
+        <style>
+          @page { size: landscape; margin: 15mm; }
+          body { font-family: sans-serif; text-align: center; padding: 10px; }
+          h2 { margin-bottom: 5px; }
+          img { width: 100%; max-height: 75vh; object-fit: contain; margin-top: 15px; }
+        </style></head><body>
+        <h2>Grafik Progres Skill-Teori-Nalar-Karakter-Minat, B.Indo-Math</h2>
+        <p style="font-weight:bold; font-size:14px; margin:0;">Kelas: ${klsName}</p>
+        <p style="color:#555; font-size:12px;">Sekolah Anak Papua - Wonorejo</p>
+        <img src="${imgData}" />
+        <script>setTimeout(() => { window.print(); window.close(); }, 700);<\/script>
+        </body></html>`;
+      printWin.document.write(html);
+      printWin.document.close();
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Import Data Excel - EduRapor</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    body {
+      background-color: #f4f6f9;
+      font-family: sans-serif;
+    }
+
+    #loadingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.95);
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .error-row {
+      background-color: #ffe8e8 !important;
+    }
+
+    .table-warning {
+      background-color: #fff3cd !important;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="loadingOverlay">
+    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+    <h5 class="mt-3 text-primary fw-bold" id="loadingText">Memproses Data...</h5>
+  </div>
+
+  <script>
+    const SCRIPT_URL = "<?= scriptUrl ?>"; 
+  </script>
+  <?!= include('navbar'); ?>
+
+  <div class="container mt-4 mb-5">
+    <!-- TAMBAHAN: User Role Badge -->
+    <h3 class="mb-4 text-primary fw-bold d-flex align-items-center">
+      <i class="fa-solid fa-file-import me-2"></i> Import Data Massal (Excel)
+      <span id="userBadge" class="badge bg-info text-dark fs-6 ms-auto shadow-sm"></span>
+    </h3>
+
+    <!-- PANEL KONTROL IMPORT -->
+    <div class="card p-4 shadow-sm border-top border-primary border-4 mb-4">
+      <div class="row g-3 align-items-end">
+
+        <div class="col-md-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <label class="fw-bold text-primary m-0">Pilih Jenis Data</label>
+            <button class="btn btn-sm btn-outline-success fw-bold py-0 px-2" onclick="downloadTemplate()" title="Unduh Format Excel">
+              <i class="fa-solid fa-file-excel"></i> Template
+            </button>
+          </div>
+          <select class="form-select border-primary" id="jenis_import" onchange="toggleMetaFilters()">
+            <option value="NILAI">Nilai Akademik (TransNilai)</option>
+            <option value="JURNAL">Jurnal Anekdotal (TransJurnal)</option>
+          </select>
+        </div>
+
+        <div class="col-md-3" id="metode_stnkm_container">
+          <label class="fw-bold text-primary mb-1">Metode Nilai STNKM</label>
+          <select class="form-select border-primary" id="metode_stnkm">
+            <option value="OTOMATIS">Otomatis (Dihitung Sistem)</option>
+            <option value="MANUAL">Apa Adanya (Dari File Excel)</option>
+          </select>
+        </div>
+
+        <!-- TAMBAHAN: Dropdown Aktivitas MBK untuk Jurnal -->
+        <div class="col-md-3 d-none" id="jenis_jurnal_container">
+          <label class="fw-bold text-primary mb-1">Aktivitas MBK (Jurnal)</label>
+          <select class="form-select border-primary" id="j_jenis">
+            <option value="">- Pilih Aktivitas -</option>
+          </select>
+        </div>
+
+        <div class="col-md-4">
+          <label class="fw-bold text-primary mb-1">Upload File Excel (.xlsx) - Maks 10MB</label>
+          <input type="file" class="form-control border-primary" id="fileExcel" accept=".xlsx, .xls, .csv">
+        </div>
+
+        <div class="col-md-2 d-flex gap-2">
+          <button class="btn btn-primary fw-bold w-100" onclick="prosesPreview()"><i class="fa-solid fa-eye me-2"></i> Preview</button>
+        </div>
+
+      </div>
+
+      <!-- FILTER METADATA UNTUK NILAI AKADEMIK -->
+      <div class="row g-3 mt-2 bg-light p-3 rounded border" id="meta_nilai_container">
+        <div class="col-12">
+          <h6 class="fw-bold text-secondary m-0"><i class="fa-solid fa-filter me-2"></i>Pengaturan Atribut Nilai (Wajib
+            Diisi)</h6>
+        </div>
+        <div class="col-md-2">
+          <label class="small fw-bold">Periode</label><select class="form-select form-select-sm" id="m_periode"></select>
+        </div>
+        <div class="col-md-2">
+          <label class="small fw-bold">Kelas</label><select class="form-select form-select-sm" id="m_kelas"></select>
+        </div>
+        <div class="col-md-3">
+          <label class="small fw-bold">Mapel</label>
+          <select class="form-select form-select-sm" id="m_mapel" onchange="updateMateriDropdown()"></select>
+        </div>
+        <div class="col-md-2">
+          <label class="small fw-bold">Jenis Ujian</label><select class="form-select form-select-sm" id="m_jenis"></select>
+        </div>
+        <div class="col-md-3">
+          <label class="small fw-bold">Materi</label><select class="form-select form-select-sm" id="m_materi"><option value="">- Pilih Mapel Dulu -</option></select>
+        </div>
+        <div class="col-md-2 mt-2"><label class="small fw-bold">Tanggal</label><input type="date" class="form-control form-control-sm" id="m_tanggal">
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL PREVIEW DATA -->
+    <div class="card shadow-sm border-0 d-none" id="previewContainer">
+      <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold text-dark m-0"><i class="fa-solid fa-table me-2"></i> Preview Data Tabel</h5>
+        <button class="btn btn-success fw-bold px-4 shadow-sm" id="btnUpload" onclick="uploadKeDatabase()"><i class="fa-solid fa-cloud-arrow-up me-2"></i> Setujui & Simpan ke Database</button>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+          <table class="table table-hover table-bordered text-center align-middle mb-0" id="previewTable">
+            <thead class="table-dark" style="position: sticky; top: 0; z-index: 1;">
+              <tr id="previewThead"></tr>
+            </thead>
+            <tbody id="previewTbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-footer bg-light">
+        <small class="text-danger fw-bold" id="errorWarningMsg"></small>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    let cUser = {};
+    let parsedJsonData = [];
+    let DB = {};
+    let isDataValid = true;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      let sessionData = sessionStorage.getItem('eduUser');
+      if (!sessionData) { window.top.location.href = SCRIPT_URL + "?page=login"; return; }
+      cUser = JSON.parse(sessionData);
+      
+      // Tampilkan Badge User
+      let badgeHtml = `<i class="fa-solid fa-user-circle me-1"></i> ${cUser.name} `;
+      badgeHtml += cUser.role === 'guru' ? `(Guru)` : `(Admin)`;
+      document.getElementById('userBadge').innerHTML = badgeHtml;
+
+      document.getElementById('m_tanggal').valueAsDate = new Date();
+      loadReferensi();
+    });
+
+    function showL(t="Memproses...") { document.getElementById('loadingText').innerText = t; document.getElementById('loadingOverlay').style.display = 'flex'; }
+    function hideL() { document.getElementById('loadingOverlay').style.display = 'none'; }
+
+    // FUNGSI BARU: Logika Pengecekan Hak Akses Mapel (Tahan Banting terhadap Sesi Lama)
+    function isMapelDiampu(mapel) {
+      if (!cUser || cUser.role !== 'guru') return true; 
+
+      // 1. Coba ambil ID dari session browser (jika user sudah relogin)
+      let myId = String(cUser.username || cUser.id_guru || cUser.id || "").toLowerCase().trim();
+
+      // 2. FALLBACK (Penyelamat): Jika user masih pakai sesi lama yang belum ada username-nya
+      if (!myId || myId === "undefined") {
+          // Cari ID guru di MasterGuru berdasarkan kecocokan nama lengkap
+          let guruMatch = (DB.MasterGuru || []).find(g => 
+              String(g.nama_guru).toLowerCase().trim() === String(cUser.name).toLowerCase().trim()
+          );
+          if (guruMatch) {
+              myId = String(guruMatch.id_guru).toLowerCase().trim();
+          }
+      }
+
+      // 3. Cocokkan ID dengan daftar guru pengampu di MasterMapel
+      let guruIDs = String(mapel.id_guru || "").toLowerCase().split(',').map(id => id.trim());
+      return guruIDs.includes(myId);
+    }
+
+    function loadReferensi() {
+      showL("Memuat Data Referensi...");
+      google.script.run
+        .withSuccessHandler(res => {
+          DB = res || {};
+          
+          let selPer = '<option value="">- Periode -</option>';
+          (DB.MasterPeriode || []).forEach(p => selPer += `<option value="${p.id_periode}" ${p.status_aktif==='AKTIF'?'selected':''}>${p.tahun_ajaran}-${p.semester}</option>`);
+          document.getElementById('m_periode').innerHTML = selPer;
+          
+          let selKls = '<option value="">- Kelas -</option>';
+          (DB.MasterKelas || []).forEach(k => selKls += `<option value="${k.id_kelas}">${k.nama_kelas}</option>`);
+          document.getElementById('m_kelas').innerHTML = selKls;
+          
+          // PENERAPAN FUNGSI FILTER MAPEL
+          let selMap = '<option value="">- Mapel -</option>';
+          (DB.MasterMapel || []).filter(m => isMapelDiampu(m)).forEach(m => {
+             selMap += `<option value="${m.id_mapel}">${m.nama_mapel}</option>`;
+          });
+          document.getElementById('m_mapel').innerHTML = selMap;
+          
+          let selJen = '<option value="">- Jenis -</option>';
+          (DB.MasterMBK || []).forEach(j => selJen += `<option value="${j.id_jenis}">${j.kategori_penilaian}</option>`);
+          document.getElementById('m_jenis').innerHTML = selJen;
+
+          // TAMBAHAN: Isi dropdown Aktivitas MBK untuk Jurnal
+          let selJenJurnal = '<option value="">- Pilih Aktivitas -</option>';
+          (DB.MasterMBK || []).forEach(j => selJenJurnal += `<option value="${j.id_jenis}">${j.kategori_penilaian}</option>`);
+          document.getElementById('j_jenis').innerHTML = selJenJurnal;
+          
+          hideL();
+        })
+        .getMasterReferences();
+    }
+
+    function updateMateriDropdown() {
+        let idMapel = document.getElementById('m_mapel').value;
+        let selMat = '<option value="">- Materi -</option>';
+        
+        if (!idMapel) {
+            document.getElementById('m_materi').innerHTML = '<option value="">- Pilih Mapel Dulu -</option>';
+            return;
+        }
+
+        let materiList = (DB.MasterMateri || []).filter(m => String(m.id_mapel) === String(idMapel));
+        materiList.forEach(m => selMat += `<option value="${m.id_materi}">${m.nama_materi}</option>`);
+        
+        document.getElementById('m_materi').innerHTML = selMat;
+    }
+
+    function toggleMetaFilters() {
+      let mode = document.getElementById('jenis_import').value;
+      let metaPanel = document.getElementById('meta_nilai_container');
+      let metodePanel = document.getElementById('metode_stnkm_container');
+      let jurnalPanel = document.getElementById('jenis_jurnal_container');
+      
+      if (mode === 'NILAI') { 
+          metaPanel.classList.remove('d-none'); 
+          metodePanel.classList.remove('d-none');
+          jurnalPanel.classList.add('d-none');
+      } else { 
+          metaPanel.classList.add('d-none'); 
+          metodePanel.classList.add('d-none');
+          jurnalPanel.classList.remove('d-none');
+      }
+      document.getElementById('previewContainer').classList.add('d-none');
+    }
+
+    function downloadTemplate() {
+      let mode = document.getElementById('jenis_import').value;
+      let metode = document.getElementById('metode_stnkm') ? document.getElementById('metode_stnkm').value : 'OTOMATIS';
+      let wb = XLSX.utils.book_new(); 
+      let ws_data = [];
+      let fileName = "";
+
+      if (mode === 'NILAI') {
+        if (metode === 'OTOMATIS') {
+            ws_data = [
+              ["id_siswa", "nama_siswa", "nilai"], 
+              ["SIS-1234567890", "Andi", "85"],    
+              ["SIS-0987654321", "Budi", "90"]     
+            ];
+        } else {
+            ws_data = [
+              ["id_siswa", "nama_siswa", "S", "T", "N", "K", "M", "Rata-rata"],
+              ["SIS-1234567890", "Andi", "80", "90", "100", "90", "98", "91.6"],
+              ["SIS-0987654321", "Budi", "80", "80", "80", "80", "80", "80"]
+            ];
+        }
+        fileName = "Template_Import_Nilai_EduRapor.xlsx";
+      } else {
+        ws_data = [
+          ["id_siswa", "nama_siswa", "tanggal", "narasi_kejadian", "val_S", "val_T", "val_N", "val_K", "val_M"],
+          ["SIS-1234567890", "Andi", "2026-10-02", "Memimpin doa sebelum belajar dengan tertib", "0", "0", "0", "2", "0"],
+          ["SIS-0987654321", "Budi", "2026-10-02", "Berani bertanya soal matematika", "0", "1", "1", "0", "2"]
+        ];
+        fileName = "Template_Import_Jurnal_EduRapor.xlsx";
+      }
+
+      let ws = XLSX.utils.aoa_to_sheet(ws_data);
+      let wscols = mode === 'NILAI' ? [{wch:25}, {wch:30}, {wch:10}] : [{wch:25}, {wch:30}, {wch:15}, {wch:50}, {wch:8}, {wch:8}, {wch:8}, {wch:8}, {wch:8}];
+      ws['!cols'] = wscols;
+      XLSX.utils.book_append_sheet(wb, ws, "Format_Data");
+
+      let ws_ref_data = [["ID Siswa (Gunakan ini)", "NISN", "Nama Lengkap Siswa", "Kelas"]];
+      let siswaList = DB.MasterSiswa || [];
+      siswaList.forEach(s => {
+        let kelasObj = (DB.MasterKelas || []).find(k => String(k.id_kelas) === String(s.id_kelas));
+        let namaKelas = kelasObj ? kelasObj.nama_kelas : "-";
+        ws_ref_data.push([ s.id_siswa, s.nisn || "-", s.nama_siswa, namaKelas ]);
+      });
+
+      let ws_ref = XLSX.utils.aoa_to_sheet(ws_ref_data);
+      ws_ref['!cols'] = [{wch:25}, {wch:15}, {wch:35}, {wch:15}]; 
+      XLSX.utils.book_append_sheet(wb, ws_ref, "Referensi_Siswa");
+
+      XLSX.writeFile(wb, fileName);
+    }
+
+    function prosesPreview() {
+      let fileInput = document.getElementById('fileExcel');
+      let file = fileInput.files[0];
+      
+      if (!file) return Swal.fire('Perhatian', 'Silakan pilih file Excel terlebih dahulu.', 'warning');
+      if (file.size > 10 * 1024 * 1024) return Swal.fire('File Terlalu Besar', 'Ukuran file melebihi batas maksimal 10MB.', 'error');
+
+      let mode = document.getElementById('jenis_import').value;
+      let metodeStnkm = document.getElementById('metode_stnkm') ? document.getElementById('metode_stnkm').value : 'OTOMATIS';
+      
+      if(mode === 'NILAI') {
+        let per = document.getElementById('m_periode').value;
+        let kls = document.getElementById('m_kelas').value;
+        let mpl = document.getElementById('m_mapel').value;
+        let jen = document.getElementById('m_jenis').value;
+        let mat = document.getElementById('m_materi').value;
+        if(!per || !kls || !mpl || !jen || !mat) {
+          return Swal.fire('Data Tidak Lengkap', 'Pilih Periode, Kelas, Mapel, Jenis, dan Materi pada kotak pengaturan atribut.', 'warning');
+          }
+      } else if (mode === 'JURNAL') {
+        let jJen = document.getElementById('j_jenis').value;
+          if(!jJen) {
+            return Swal.fire('Data Tidak Lengkap', 'Pilih Aktivitas MBK (Jurnal) terlebih dahulu sebelum klik Preview.', 'warning');
+          }
+      }
+      
+
+      showL("Membaca File Excel...");
+      let reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          let data = new Uint8Array(e.target.result);
+          let workbook = XLSX.read(data, {type: 'array'});
+          let firstSheetName = workbook.SheetNames[0];
+          let worksheet = workbook.Sheets[firstSheetName];
+          
+          let jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+          if(jsonData.length === 0) {
+             hideL(); return Swal.fire('File Kosong', 'Tidak ada data baris di dalam file Excel.', 'warning');
+          }
+
+          parsedJsonData = jsonData;
+          renderTabelPreview(jsonData, mode, metodeStnkm);
+          hideL();
+        } catch(err) {
+          hideL(); Swal.fire('Gagal Membaca', 'Format file rusak atau tidak didukung: ' + err.message, 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function renderTabelPreview(data, mode, metodeStnkm) {
+      let thead = document.getElementById('previewThead');
+      let tbody = document.getElementById('previewTbody');
+      let errLabel = document.getElementById('errorWarningMsg');
+      
+      thead.innerHTML = ''; tbody.innerHTML = ''; errLabel.innerText = '';
+      isDataValid = true;
+      let errorCount = 0;
+
+      let headers = Object.keys(data[0]);
+      
+      let requiredColumns = [];
+      if (mode === 'NILAI') {
+          if (metodeStnkm === 'OTOMATIS') {
+              requiredColumns = ['id_siswa', 'nilai']; 
+          } else {
+              requiredColumns = ['id_siswa', 's', 't', 'n', 'k', 'm', 'rata-rata']; 
+          }
+      } else {
+          requiredColumns = ['id_siswa', 'tanggal', 'narasi_kejadian'];
+      }
+      
+      let missingColumns = requiredColumns.filter(req => !headers.find(h => h.toLowerCase() === req));
+      if(missingColumns.length > 0) {
+        Swal.fire('Format Salah', 'File Anda kehilangan kolom wajib: ' + missingColumns.join(", "), 'error');
+        return;
+      }
+
+      let thHTML = '<th>Baris</th>';
+      headers.forEach(h => { thHTML += `<th>${h}</th>`; });
+      thHTML += '<th>Status</th>';
+      thead.innerHTML = thHTML;
+
+      let trHTML = '';
+      data.forEach((row, index) => {
+        let isRowError = false;
+        let isRowEmpty = false; 
+        let errMsg = [];
+
+        let sisIdKey = headers.find(h => h.toLowerCase() === 'id_siswa' || h.toLowerCase() === 'nisn');
+        if(!row[sisIdKey] || row[sisIdKey] === "") { isRowError = true; errMsg.push("ID Siswa Kosong"); }
+        
+        if (mode === 'NILAI') {
+           if (metodeStnkm === 'OTOMATIS') {
+               let nilaiKey = headers.find(h => h.toLowerCase() === 'nilai');
+               let val = row[nilaiKey];
+               
+               if (val === "" || val === undefined || val === null) {
+                   isRowEmpty = true; 
+               } else if (isNaN(val)) { 
+                   isRowError = true; errMsg.push("Nilai Tidak Valid (Bukan Angka)"); 
+               }
+           } else {
+               let avgKey = headers.find(h => h.toLowerCase() === 'rata-rata');
+               let val = row[avgKey];
+               
+               if (val === "" || val === undefined || val === null) {
+                   isRowEmpty = true;
+               } else if (isNaN(val)) { 
+                   isRowError = true; errMsg.push("Rata-rata Bukan Angka"); 
+               }
+               
+               ['s', 't', 'n', 'k', 'm'].forEach(k => {
+                   let colKey = headers.find(h => h.toLowerCase() === k);
+                   let pVal = row[colKey];
+                   if (pVal !== undefined && pVal !== "" && isNaN(pVal)) { 
+                       isRowError = true; 
+                       errMsg.push(`Poin ${k.toUpperCase()} Bukan Angka`); 
+                   }
+               });
+           }
+        } else {
+           let tglKey = headers.find(h => h.toLowerCase() === 'tanggal');
+           let narasiKey = headers.find(h => h.toLowerCase() === 'narasi_kejadian');
+           
+           // Jika tanggal atau narasi kosong, beri lencana kuning (Dilewati) alih-alih error
+           if (!row[tglKey] || row[tglKey] === "" || !row[narasiKey] || String(row[narasiKey]).trim() === "") { 
+               isRowEmpty = true; 
+           }
+
+           // Validasi tolak huruf (NaN) di kolom S, T, N, K, M khusus Jurnal
+           ['val_s', 'val_t', 'val_n', 'val_k', 'val_m'].forEach(k => {
+               let colKey = headers.find(h => h.toLowerCase() === k);
+               if (colKey) {
+                   let pVal = row[colKey];
+                   if (pVal !== undefined && pVal !== "" && pVal !== null && isNaN(pVal)) { 
+                       isRowError = true; 
+                       errMsg.push(`Poin ${k.split('_')[1].toUpperCase()} Bukan Angka`); 
+                   }
+               }
+           });
+        }
+
+        if(isRowError) { isDataValid = false; errorCount++; }
+
+        let rowClass = isRowError ? 'error-row' : (isRowEmpty ? 'table-warning' : '');
+        let rowDataHtml = `<td>${index + 2}</td>`; 
+        headers.forEach(h => { rowDataHtml += `<td>${row[h]}</td>`; });
+        
+        let statusBadge = "";
+        if (isRowError) {
+            statusBadge = `<span class="badge bg-danger">${errMsg.join(', ')}</span>`;
+        } else if (isRowEmpty) {
+            statusBadge = `<span class="badge bg-warning text-dark"><i class="fa-solid fa-triangle-exclamation"></i> Kosong (Dilewati)</span>`;
+        } else {
+            statusBadge = `<span class="badge bg-success"><i class="fa-solid fa-check"></i> OK</span>`;
+        }
+        
+        rowDataHtml += `<td>${statusBadge}</td>`;
+        trHTML += `<tr class="${rowClass}">${rowDataHtml}</tr>`;
+      });
+
+      tbody.innerHTML = trHTML;
+      
+      let btn = document.getElementById('btnUpload');
+      if (!isDataValid) {
+        errLabel.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Terdapat ${errorCount} baris dengan data bermasalah (disorot merah). Harap perbaiki file Anda dan upload ulang.`;
+        btn.disabled = true;
+      } else {
+        errLabel.innerText = "Semua format baris sesuai. Siap disimpan.";
+        btn.disabled = false;
+      }
+
+      document.getElementById('previewContainer').classList.remove('d-none');
+    }
+
+    function uploadKeDatabase() {
+      if (!isDataValid || parsedJsonData.length === 0) return;
+
+      let mode = document.getElementById('jenis_import').value;
+      let payload = [];
+      let headers = Object.keys(parsedJsonData[0]);
+      let idSiswaKey = headers.find(h => h.toLowerCase() === 'id_siswa' || h.toLowerCase() === 'nisn');
+
+      if (mode === 'NILAI') {
+        let meta = {
+          id_periode: document.getElementById('m_periode').value,
+          id_kelas: document.getElementById('m_kelas').value,
+          id_mapel: document.getElementById('m_mapel').value,
+          id_jenis: document.getElementById('m_jenis').value,
+          id_materi: document.getElementById('m_materi').value,
+          tanggal: document.getElementById('m_tanggal').value,
+          id_guru: cUser.id_guru || cUser.username,
+          metode_stnkm: document.getElementById('metode_stnkm').value
+        };
+        
+        let nilaiKey = headers.find(h => h.toLowerCase() === 'nilai');
+        let avgKey = headers.find(h => h.toLowerCase() === 'rata-rata');
+        let sKey = headers.find(h => h.toLowerCase() === 's');
+        let tKey = headers.find(h => h.toLowerCase() === 't');
+        let nKey = headers.find(h => h.toLowerCase() === 'n');
+        let kKey = headers.find(h => h.toLowerCase() === 'k');
+        let mKey = headers.find(h => h.toLowerCase() === 'm');
+
+        parsedJsonData.forEach(row => {
+          let rec = {
+            id_periode: meta.id_periode,
+            id_kelas: meta.id_kelas,
+            id_mapel: meta.id_mapel,
+            id_jenis: meta.id_jenis,
+            id_materi: meta.id_materi,
+            tanggal: meta.tanggal,
+            id_guru: meta.id_guru,
+            id_siswa: row[idSiswaKey],
+            metode_stnkm: meta.metode_stnkm
+          };
+
+          if (meta.metode_stnkm === 'OTOMATIS') {
+              rec.nilai = row[nilaiKey];
+          } else {
+              rec.nilai = row[avgKey];
+              rec.poin_S = parseFloat(row[sKey]) || 0;
+              rec.poin_T = parseFloat(row[tKey]) || 0;
+              rec.poin_N = parseFloat(row[nKey]) || 0;
+              rec.poin_K = parseFloat(row[kKey]) || 0;
+              rec.poin_M = parseFloat(row[mKey]) || 0;
+          }
+          
+          payload.push(rec);
+        });
+
+        showL("Menyimpan & Ekstraksi Nilai STNKM Massal...");
+        google.script.run
+          .withSuccessHandler(res => {
+            hideL();
+            if(res.success) {
+               Swal.fire('Berhasil', res.message, 'success').then(() => { 
+                   document.getElementById('previewContainer').classList.add('d-none');
+                   document.getElementById('fileExcel').value = "";
+                   parsedJsonData = [];
+               });
+            } else { Swal.fire('Gagal', res.message, 'error'); }
+          })
+          .withFailureHandler(err => { hideL(); Swal.fire('Error', err.message, 'error'); })
+          .saveNilaiBatch(payload);
+
+      } else if (mode === 'JURNAL') {
+        let tglKey = headers.find(h => h.toLowerCase() === 'tanggal');
+        let narasiKey = headers.find(h => h.toLowerCase() === 'narasi_kejadian');
+        let sKey = headers.find(h => h.toLowerCase() === 'val_s');
+        let tKey = headers.find(h => h.toLowerCase() === 'val_t');
+        let nKey = headers.find(h => h.toLowerCase() === 'val_n');
+        let kKey = headers.find(h => h.toLowerCase() === 'val_k');
+        let mKey = headers.find(h => h.toLowerCase() === 'val_m');
+        let selectedJenisJurnal = document.getElementById('j_jenis').value; // Ambil nilai dropdown
+        parsedJsonData.forEach(row => {
+          // Abaikan baris jika tanggal atau narasinya kosong (sesuai lencana kuning)
+          if (!row[tglKey] || row[tglKey] === "" || !row[narasiKey] || String(row[narasiKey]).trim() === "") {
+              return; 
+          }
+
+          payload.push({
+            id_jurnal: "JRN-" + new Date().getTime() + "-" + Math.floor(Math.random() * 10000),
+            id_siswa: row[idSiswaKey],
+            tanggal: row[tglKey],
+            id_guru: cUser.id_guru || cUser.username,
+            id_jenis: selectedJenisJurnal, // <-- Sisipkan ke payload
+            id_materi: "", // Kosongkan materi karena ini jalur observasi
+            narasi_kejadian: row[narasiKey],
+            mode_dampak: "PISAH",
+            val_S: sKey ? (parseFloat(row[sKey]) || 0) : 0,
+            val_T: tKey ? (parseFloat(row[tKey]) || 0) : 0,
+            val_N: nKey ? (parseFloat(row[nKey]) || 0) : 0,
+            val_K: kKey ? (parseFloat(row[kKey]) || 0) : 0,
+            val_M: mKey ? (parseFloat(row[mKey]) || 0) : 0
+          });
+        });
+
+        showL("Menyimpan Jurnal Massal...");
+        google.script.run
+          .withSuccessHandler(res => {
+            hideL();
+            if(res.success) {
+               Swal.fire('Berhasil', res.message, 'success').then(() => { 
+                   document.getElementById('previewContainer').classList.add('d-none');
+                   document.getElementById('fileExcel').value = "";
+                   parsedJsonData = [];
+               });
+            } else { Swal.fire('Gagal', res.message, 'error'); }
+          })
+          .withFailureHandler(err => { hideL(); Swal.fire('Error', err.message, 'error'); })
+          .saveJurnalBatch(payload);
+      }
+    }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jadwal Pembelajaran - EduRapor</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+
+  <style>
+    body {
+      background-color: #f4f6f9;
+      font-family: sans-serif;
+      overflow-x: hidden;
+    }
+
+    #loadingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.9);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .schedule-container {
+      display: flex;
+      height: calc(100vh - 70px);
+    }
+
+    .panel-left {
+      width: 280px;
+      min-width: 280px;
+      background: white;
+      border-right: 1px solid #e0e0e0;
+      padding: 20px;
+      overflow-y: auto;
+      transition: 0.3s;
+    }
+
+    .panel-center {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      background: white;
+    }
+
+    .panel-right {
+      width: 350px;
+      min-width: 350px;
+      background: #fafafa;
+      border-left: 1px solid #e0e0e0;
+      padding: 20px;
+      overflow-y: auto;
+      transition: 0.3s;
+      transform: translateX(0);
+    }
+
+    .panel-right.hidden {
+      transform: translateX(100%);
+      margin-right: -350px;
+    }
+
+    .fc .fc-toolbar-title {
+      font-size: 1.25rem;
+      font-weight: bold;
+      color: #3f51b5;
+    }
+
+    .fc-event {
+      cursor: pointer;
+      border-radius: 6px;
+      padding: 0 !important;
+      border: none !important;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .fc-event-main {
+      color: inherit;
+    }
+
+    .detail-card {
+      background: white;
+      border-radius: 12px;
+      border-top: 4px solid #3f51b5;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+
+    .stnkm-badge {
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      margin-right: 4px;
+    }
+
+    .color-option {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      display: inline-block;
+      margin-right: 5px;
+    }
+
+    .color-option.selected {
+      border: 2px solid #000;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    }
+
+    .day-checkbox {
+      display: none;
+    }
+
+    .day-label {
+      cursor: pointer;
+      display: inline-block;
+      width: 35px;
+      height: 35px;
+      text-align: center;
+      line-height: 35px;
+      border-radius: 50%;
+      background: #e9ecef;
+      color: #6c757d;
+      font-weight: bold;
+      margin-right: 5px;
+      transition: 0.2s;
+    }
+
+    .day-checkbox:checked+.day-label {
+      background: #3f51b5;
+      color: white;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+
+    .quick-action-btn {
+      transition: transform 0.2s;
+    }
+
+    .quick-action-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    /* ========================================================
+    1. MATERIAL DESIGN GOOGLE CALENDAR (FORCED OVERRIDE) 
+    ======================================================== */
+    .fc .fc-toolbar-title {
+      font-size: 1.5rem !important;
+      font-weight: 700 !important;
+      color: #202124 !important;
+      letter-spacing: -0.5px !important;
+    }
+
+    .fc .fc-button-primary {
+      background-color: #ffffff !important;
+      color: #3c4043 !important;
+      border: 1px solid #dadce0 !important;
+      border-radius: 4px !important;
+      text-transform: capitalize !important;
+      font-weight: 500 !important;
+      box-shadow: none !important;
+      transition: 0.2s !important;
+    }
+
+    .fc .fc-button-primary:hover {
+      background-color: #f1f3f4 !important;
+      color: #202124 !important;
+    }
+
+    .fc .fc-button-primary:not(:disabled).fc-button-active,
+    .fc .fc-button-primary:not(:disabled):active {
+      background-color: #e8f0fe !important;
+      color: #1967d2 !important;
+      border-color: #e8f0fe !important;
+    }
+
+    .fc-theme-standard td,
+    .fc-theme-standard th {
+      border-color: #dadce0 !important;
+    }
+
+    .fc-day-today {
+      background-color: #f8f9fa !important;
+    }
+
+    /* Transisi Halus pada Kartu Event Kalender */
+    .fc-event {
+      border-radius: 8px !important;
+      border: none !important;
+      box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3) !important;
+      transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1) !important;
+      background: transparent !important;
+      cursor: pointer !important;
+    }
+
+    /* Efek Melayang (Elevated) saat Mouse Diarahkan (Hover) */
+    .fc-event:hover {
+      box-shadow: 0 4px 8px 3px rgba(60, 64, 67, 0.15) !important;
+      transform: translateY(-2px) !important;
+      z-index: 99 !important;
+    }
+
+    .custom-event-card {
+      border-radius: 8px !important;
+      height: 100%;
+      transition: filter 0.2s ease;
+    }
+
+    .fc-event:hover .custom-event-card {
+      filter: brightness(0.95);
+    }
+
+    /* ========================================================
+      2. CSS PANEL TO-DO LIST STNKM CERDAS
+    ======================================================== */
+    .stnkm-task-panel {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .stnkm-task-header {
+      background: #f8f9fa;
+      padding: 12px;
+      border-bottom: 1px solid #e0e0e0;
+      font-weight: bold;
+      color: #202124;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .stnkm-task-list {
+      padding: 12px;
+      background: #ffffff;
+    }
+
+    .stnkm-task-item {
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      transition: 0.2s;
+      background: #fff;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .stnkm-task-item:hover {
+      box-shadow: 0 2px 6px rgba(60, 64, 67, 0.2);
+      background-color: #f8f9fa;
+      transform: translateY(-1px);
+    }
+
+    .stnkm-task-item.priority-high {
+      border-left: 4px solid #ea4335;
+    }
+
+    .stnkm-task-item.priority-medium {
+      border-left: 4px solid #fbbc04;
+    }
+
+    .stnkm-task-item.priority-low {
+      border-left: 4px solid #34a853;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="loadingOverlay">
+    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+    <h5 class="mt-3 text-muted" id="loadingText">Menyiapkan Linimasa Jadwal...</h5>
+  </div>
+
+  <script>
+    const SCRIPT_URL = "<?= scriptUrl ?>"; 
+  </script>
+  <?!= include('navbar'); ?>
+
+  <div class="schedule-container">
+
+    <div class="panel-left shadow-sm" id="panelLeft">
+      <h5 class="fw-bold text-primary mb-4"><i class="fa-solid fa-layer-group me-2"></i>Filter Jadwal</h5>
+      <button class="btn btn-primary w-100 mb-4 fw-bold shadow-sm" onclick="bukaModalJadwalBaru()">
+        <i class="fa-solid fa-plus me-2"></i> Plotting Baru
+      </button>
+      <div class="mb-4">
+        <label class="fw-bold small text-muted mb-2">GURU PENGAMPU</label>
+        <div id="filterGuruContainer"></div>
+      </div>
+    </div>
+
+    <div class="panel-center">
+      <div id="calendar"></div>
+    </div>
+
+    <div class="panel-right hidden" id="panelRight">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold text-dark m-0">Detail Sesi</h5>
+        <button class="btn btn-sm btn-light" onclick="tutupPanelKanan()"><i class="fa-solid fa-times"></i></button>
+      </div>
+      <div id="detailKonten" class="detail-card p-3"></div>
+    </div>
+
+  </div>
+
+  <div class="modal fade" id="modalJadwal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content border-0 shadow">
+        <div class="modal-header bg-primary text-white">
+          <h5 class="modal-title fw-bold" id="modalJadwalTitle"><i class="fa-solid fa-calendar-plus me-2"></i>Plotting
+            Jadwal</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+          <form id="formJadwal" onsubmit="handleSubmitJadwal(event)">
+
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Guru Pengampu</label>
+                <select class="form-select border-primary" id="j_guru" required></select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Pilih Ruangan</label>
+                <select class="form-select border-primary" id="j_ruangan" required></select>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Mata Pelajaran</label>
+                <select class="form-select" id="j_mapel" required></select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Materi / Topik</label>
+                <select class="form-select" id="j_materi" required></select>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-bold text-muted">Persiapan Khusus (Alat/Media/Catatan)</label>
+              <textarea class="form-control" id="j_persiapan" rows="2" placeholder="Contoh: Bawa alat peraga..."></textarea>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small fw-bold text-muted"><i class="fa-solid fa-paperclip"></i> Lampiran (Modul/Video/Dokumen) - Opsional</label>
+              <input class="form-control form-control-sm border-secondary" type="file" id="j_file">
+              <small class="text-muted" style="font-size: 11px;">(Maks 5MB. File akan diunggah ke Google Drive)</small>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Status Sesi</label>
+                <select class="form-select" id="j_status">
+                  <option value="Menunggu">Menunggu / Terjadwal</option>
+                  <option value="Berlangsung">Sedang Berlangsung</option>
+                  <option value="Selesai">Selesai</option>
+                  <option value="Batal">Batal / Reschedule</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Warna Kartu</label>
+                <div id="colorPickerContainer" class="d-flex align-items-center mt-1"></div>
+              </div>
+            </div>
+
+            <hr>
+
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Tanggal & Jam Mulai Sesi</label>
+                <input type="datetime-local" class="form-control" id="j_mulai" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Jam Selesai</label>
+                <input type="time" class="form-control" id="j_selesai" required>
+              </div>
+            </div>
+
+            <div class="mb-3 p-3 bg-light rounded border" id="areaPeriodisitas">
+              <label class="form-label fw-bold text-primary mb-2"><i class="fa-solid fa-rotate me-2"></i>Pengaturan Pengulangan (Periodisitas)</label>
+              <select class="form-select mb-3" id="j_ulangi" onchange="toggleRepeatOptions()">
+                 <option value="1">Hanya Sekali (Tidak Diulang)</option>
+                 <option value="harian">Ulangi Setiap Hari</option>
+                 <option value="kustom">Kustom / Pilih Hari Khusus</option>
+               </select>
+
+              <div id="customDaysBox" style="display: none;" class="mb-3 text-center">
+                <label class="small fw-bold text-muted d-block text-start mb-2">Ulangi setiap hari:</label>
+                <input type="checkbox" id="d_1" class="day-checkbox" value="1"><label for="d_1" class="day-label">S</label>
+                <input type="checkbox" id="d_2" class="day-checkbox" value="2"><label for="d_2" class="day-label">S</label>
+                <input type="checkbox" id="d_3" class="day-checkbox" value="3"><label for="d_3" class="day-label">R</label>
+                <input type="checkbox" id="d_4" class="day-checkbox" value="4"><label for="d_4" class="day-label">K</label>
+                <input type="checkbox" id="d_5" class="day-checkbox" value="5"><label for="d_5" class="day-label">J</label>
+                <input type="checkbox" id="d_6" class="day-checkbox" value="6"><label for="d_6" class="day-label">S</label>
+                <input type="checkbox" id="d_0" class="day-checkbox" value="0"><label for="d_0" class="day-label text-danger">M</label>
+              </div>
+
+              <div id="batasWaktuBox" style="display: none;">
+                <label class="form-label small fw-bold text-muted">Berlaku Hingga Tanggal (Batas Akhir)</label>
+                <input type="date" class="form-control" id="j_batas_akhir">
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+              <button type="submit" class="btn btn-primary w-100 fw-bold" id="btnSimpanJadwal">Simpan Jadwal</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <script>
+    let cUser = null;
+    try { cUser = JSON.parse(sessionStorage.getItem('eduUser')); if(!cUser) window.top.location.href = SCRIPT_URL + "?page=login"; } catch(e) {}
+
+    let DB = {};
+    let calendar;
+    let editJadwalId = null; 
+    let existingUrlLampiran = ""; 
+    const isAdmin = cUser && (cUser.role === 'admin' || cUser.role === 'kepsek');
+    
+    function initApp() {
+      // Hilangkan pemblokiran panelLeft untuk Guru. Semua melihat panel kiri sekarang.
+      loadDatabase();
+    }
+
+    function loadDatabase() {
+      google.script.run
+        .withSuccessHandler(res => { 
+          DB = res || {}; 
+          if (isAdmin) renderManajerialFilters();
+          renderColorPicker();
+          initCalendar();
+          populateModalDropdowns();
+          document.getElementById('loadingOverlay').style.display = 'none';
+        })
+        .withFailureHandler(err => { 
+          document.getElementById('loadingOverlay').style.display = 'none';
+          Swal.fire('Error', err.message, 'error'); 
+        })
+        .getRelationalData(); 
+    }
+
+    function renderColorPicker() {
+      let colors = ['#3f51b5', '#20c997', '#6f42c1', '#fd7e14', '#e83e8c', '#dc3545', '#0dcaf0', '#198754', '#ffc107', '#6c757d', '#000000', '#d63384'];
+      let container = document.getElementById('colorPickerContainer');
+      let html = '';
+      colors.forEach((c, idx) => {
+        let sel = idx === 0 ? 'selected' : '';
+        html += `<div class="color-option ${sel}" style="background-color: ${c};" onclick="selectColor(this, '${c}')"></div>`;
+      });
+      html += `<input type="hidden" id="j_warna" value="${colors[0]}">`;
+      container.innerHTML = html;
+    }
+
+    function selectColor(elem, hexColor) {
+      document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
+      elem.classList.add('selected');
+      document.getElementById('j_warna').value = hexColor;
+    }
+
+    function toggleRepeatOptions() {
+      let rType = document.getElementById('j_ulangi').value;
+      if(rType === '1') { 
+         document.getElementById('customDaysBox').style.display = 'none';
+         document.getElementById('batasWaktuBox').style.display = 'none';
+      } else if (rType === 'harian') {
+         document.getElementById('customDaysBox').style.display = 'none';
+         document.getElementById('batasWaktuBox').style.display = 'block';
+      } else {
+         document.getElementById('customDaysBox').style.display = 'block';
+         document.getElementById('batasWaktuBox').style.display = 'block';
+      }
+    }
+
+    function showL(t="Memproses...") { document.getElementById('loadingText').innerText = t; document.getElementById('loadingOverlay').style.display = 'flex'; }
+    function hideL() { document.getElementById('loadingOverlay').style.display = 'none'; }
+
+    function parseSafeDate(dStr) {
+      if (!dStr) return null; dStr = String(dStr).trim();
+      let testDate = new Date(dStr);
+      if (!isNaN(testDate.getTime())) {
+         let y = testDate.getFullYear(); let m = String(testDate.getMonth() + 1).padStart(2, '0'); let d = String(testDate.getDate()).padStart(2, '0');
+         let h = String(testDate.getHours()).padStart(2, '0'); let min = String(testDate.getMinutes()).padStart(2, '0');
+         return `${y}-${m}-${d}T${h}:${min}:00`;
+      }
+      let dPart = "", tPart = "00:00:00";
+      if (dStr.includes('T')) { let parts = dStr.split('T'); dPart = parts[0]; tPart = parts[1] || "00:00:00"; } 
+      else { let parts = dStr.split(' '); dPart = parts[0]; if (parts.length > 1) tPart = parts[1]; }
+      if (dPart === "" || dPart.startsWith("T")) dPart = new Date().toISOString().split('T')[0];
+      let timeParts = tPart.split(':');
+      let h = (timeParts[0] || '00').padStart(2, '0'); let min = (timeParts[1] || '00').padStart(2, '0'); let s = (timeParts[2] || '00').padStart(2, '0');
+      tPart = `${h}:${min}:${s}`;
+      if (dPart.includes('/')) {
+        let p = dPart.split('/');
+        if (p.length === 3) {
+          if (p[0].length === 4) return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}T${tPart}`;
+          return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}T${tPart}`;
+        }
+      } else if (dPart.includes('-')) {
+        let p = dPart.split('-');
+        if (p.length === 3) {
+           if (p[0].length === 4) return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}T${tPart}`;
+           return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}T${tPart}`;
+        }
+      }
+      return `${dPart}T${tPart}`;
+    }
+
+    function initCalendar() {
+      let calEl = document.getElementById('calendar');
+      calendar = new FullCalendar.Calendar(calEl, {
+        // Mode default ke minggu, tapi header punya opsi lengkap ala G-Calendar
+        initialView: 'timeGridWeek',
+        headerToolbar: { 
+          left: 'prev,next today', 
+          center: 'title', 
+          right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' 
+        },
+        buttonText: { month: 'Bulan', week: 'Minggu', day: 'Hari', list: 'Agenda' },
+        slotMinTime: '07:00:00', slotMaxTime: '16:00:00', allDaySlot: false, 
+        
+        // Drag & drop aktif untuk semua, tapi dicegat di dalam handleDropEvent jika bukan pemilik
+        editable: true, 
+        eventDrop: handleDropEvent, eventResize: handleDropEvent, eventClick: handleEventClick, 
+        
+        // Fitur Klik Grid Hari (Buka form otomatis terisi tanggal yang diklik)
+        dateClick: function(info) {
+           bukaModalJadwalBaru(info.dateStr);
+        },
+        
+        events: getFormattedEvents(),
+        eventContent: function(arg) {
+          let props = arg.event.extendedProps;
+          let waktu = arg.timeText || '';
+          let statWarna = 'text-warning';
+          if(props.status === 'Berlangsung') statWarna = 'text-success';
+          if(props.status === 'Selesai') statWarna = 'text-muted';
+          if(props.status === 'Batal') statWarna = 'text-danger';
+
+          // Verifikasi kepemilikan untuk tombol edit/hapus
+          let isOwner = cUser.role === 'guru' && props.guruId === cUser.username;
+          // Di dalam eventContent saat merender tombol kalender:
+          let canEdit = arg.event.extendedProps.canEdit;
+          let actionBtns = '';
+          if (canEdit) {
+              actionBtns = `
+              <div class="mt-1 d-flex gap-1" style="position:relative; z-index:9;">
+                  <span class="badge bg-light text-primary border cursor-pointer action-edit" onclick="triggerAksiLokal(event, 'edit', '${arg.event.id}')" title="Edit"><i class="fa-solid fa-pen"></i></span>
+                  <span class="badge bg-light text-danger border cursor-pointer action-delete" onclick="triggerAksiLokal(event, 'hapus', '${arg.event.id}')" title="Hapus"><i class="fa-solid fa-trash"></i></span>
+              </div>`;
+          }
+          let attachmentIcon = props.lampiran ? `<i class="fa-solid fa-paperclip text-white ms-1 opacity-75"></i>` : '';
+
+          // Ganti baris "return { html: ... }" di dalam eventContent pada fungsi initCalendar() menjadi seperti ini:
+          return { 
+            html: `<div class="custom-event-card position-relative p-2" style="background-color: ${arg.event.backgroundColor}; color: #fff;     overflow:hidden;">
+                    <div class="fw-bold mb-1 lh-sm" style="font-size: 13px;">${props.mapel} ${attachmentIcon}</div>
+                    <div style="font-size: 11px;" class="mb-1"><i class="fa-solid fa-user-tie me-1"></i>${props.guru}</div>
+                    <div style="font-size: 11px;" class="mb-1"><i class="fa-solid fa-door-open me-1"></i>${props.ruangan}</div>
+                    <div style="font-size: 10.5px;" class="mb-1 opacity-75"><i class="fa-regular fa-clock me-1"></i>${waktu}</div>
+                    <div style="font-size: 10px; font-weight:600;" class="bg-white rounded px-1 d-inline-block ${statWarna} shadow-sm">${props.status}</div>
+                    ${actionBtns}
+                  </div>` 
+          };
+        }
+      });
+      calendar.render();
+    }
+
+    window.triggerAksiLokal = function(e, action, id) { e.stopPropagation(); e.preventDefault(); if (action === 'edit') editJadwal(id); else if (action === 'hapus') hapusJadwal(id); };
+
+    function getFormattedEvents() {
+      let events = [];
+      let jadwalRaw = DB.TransJadwal || [];
+      let selectedGurus = [];
+      
+      if (isAdmin) {
+        let checkboxes = document.querySelectorAll('.filter-guru:checked');
+        checkboxes.forEach(c => selectedGurus.push(c.value));
+      }
+
+      jadwalRaw.forEach(j => {
+        // HAPUS atau KOMENTARI baris ini agar guru bisa melihat jadwal guru lain
+        // if (!isAdmin && j.id_guru !== (cUser.id_guru || cUser.username)) return;
+        
+        if (isAdmin && selectedGurus.length > 0 && !selectedGurus.includes(j.id_guru)) return;
+
+        let materi = DB.MasterMateri?.find(m => m.id_materi === j.id_materi);
+        let guru = DB.MasterGuru?.find(g => g.id_guru === j.id_guru);
+        let kelas = DB.MasterKelas?.find(k => String(k.id_kelas) === String(j.id_kelas));
+        
+        let title = (materi ? materi.nama_materi : 'Materi') + (guru ? ` (${guru.nama_guru})` : '');
+        let colorClass = 'bg-primary';
+        if (materi && materi.nama_materi.toLowerCase().includes('komsos')) colorClass = 'bg-komsos';
+        if (materi && materi.nama_materi.toLowerCase().includes('inggris')) colorClass = 'bg-binggris';
+
+        // PENGECEKAN KEPEMILIKAN
+        let isOwner = (j.id_guru === cUser.username || j.id_guru === cUser.id_guru);
+        let canEdit = isAdmin || isOwner;
+
+        events.push({
+          id: j.id_jadwal,
+          title: title,
+          start: j.tanggal_mulai,
+          end: j.tanggal_selesai,
+          editable: canEdit, // Hanya bisa di-drag oleh pemilik atau admin
+          classNames: [colorClass, 'text-white'],
+          extendedProps: {
+             guru: guru ? guru.nama_guru : '-',
+             kelas: kelas ? kelas.nama_kelas : j.id_kelas,
+             canEdit: canEdit, // Diteruskan ke eventContent dan sidebar
+             persiapan: j.persiapan_khusus || 'Tidak ada catatan khusus.',
+             stnkm: materi ? { S: materi.mat_S, T: materi.mat_T, N: materi.mat_N, K: materi.mat_K, M: materi.mat_M } : null
+          }
+        });
+      });
+      return events;
+    }
+
+    function renderManajerialFilters() {
+      let guruContainer = document.getElementById('filterGuruContainer');
+      let guruHtml = `<div class="form-check mb-2"><input class="form-check-input" type="checkbox" value="ALL" id="guruAll" checked onchange="toggleAllGuru(this)"><label class="form-check-label fw-bold" for="guruAll">Semua Guru</label></div>`;
+      if (DB.MasterGuru) {
+        DB.MasterGuru.forEach(g => { guruHtml += `<div class="form-check mb-1"><input class="form-check-input filter-guru" type="checkbox" value="${g.id_guru}" checked onchange="terapkanFilter()"><label class="form-check-label small">${g.nama_guru}</label></div>`; });
+      }
+      guruContainer.innerHTML = guruHtml;
+    }
+    function toggleAllGuru(cb) { document.querySelectorAll('.filter-guru').forEach(c => c.checked = cb.checked); terapkanFilter(); }
+    function terapkanFilter() { if(calendar) { calendar.removeAllEvents(); calendar.addEventSource(getFormattedEvents()); } }
+
+    function lompatKe(halaman, kls, mapel, tgl) {
+        let state = JSON.parse(sessionStorage.getItem('eduAppState')) || {};
+        state.kelas = kls; state.mapel = mapel; state.tanggal = tgl;
+        sessionStorage.setItem('eduAppState', JSON.stringify(state));
+        window.top.location.href = SCRIPT_URL + "?page=" + halaman;
+    }
+
+    function handleEventClick(info) {
+      document.getElementById('panelRight').classList.remove('hidden');
+      let props = info.event.extendedProps;
+      let dStart = info.event.start;
+      let waktu = dStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) + ' - ' + (info.event.end ? info.event.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Selesai');
+      let tglStr = dStart.toLocaleDateString('id-ID', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+      let tglIso = dStart.toISOString().split('T')[0]; 
+
+      // Panel To-Do List STNKM Terintegrasi Cerdas
+      let stnkmHtml = '';
+      if (props.stnkm) {
+        // Logika notifikasi tindakan berdasarkan pencapaian STNKM
+        let taskS = props.stnkm.S < 0.7 ? `<div class="stnkm-task-item priority-high"><div class="fw-bold text-dark small mb-1"><i class="fa-solid fa-circle-exclamation text-danger me-1"></i> Fokus Praktik Skill (S)</div><div class="text-muted" style="font-size:11px;">Target observasi di bawah 70%. Siapkan metode praktik langsung/interaktif pada sesi ini.</div></div>` : '';
+        let taskN = props.stnkm.N < 0.7 ? `<div class="stnkm-task-item priority-medium"><div class="fw-bold text-dark small mb-1"><i class="fa-solid fa-brain text-warning me-1"></i> Pacu Nalar Kritis (N)</div><div class="text-muted" style="font-size:11px;">Rangsang nalar analitis dengan pertanyaan pemantik studi kasus nyata.</div></div>` : '';
+        let taskK = props.stnkm.K < 0.7 ? `<div class="stnkm-task-item priority-medium"><div class="fw-bold text-dark small mb-1"><i class="fa-solid fa-hands-holding-circle text-warning me-1"></i> Penguatan Karakter (K)</div><div class="text-muted" style="font-size:11px;">Arahkan fokus pada sikap kolaborasi dan adab siswa dalam menyerap materi.</div></div>` : '';
+
+        stnkmHtml = `
+          <div class="mt-4 stnkm-task-panel rounded overflow-hidden shadow-sm">
+            <div class="stnkm-task-header">
+              <span><i class="fa-solid fa-list-check me-2 text-primary"></i> Notifikasi Tugas STNKM</span>
+            </div>
+            <div class="p-2 bg-light border-bottom d-flex justify-content-between align-items-center flex-wrap gap-1">
+              <span class="badge bg-primary stnkm-badge">S: ${props.stnkm.S*100}%</span>
+              <span class="badge bg-success stnkm-badge">T: ${props.stnkm.T*100}%</span>
+              <span class="badge bg-info text-dark stnkm-badge">N: ${props.stnkm.N*100}%</span>
+              <span class="badge bg-warning text-dark stnkm-badge">K: ${props.stnkm.K*100}%</span>
+              <span class="badge bg-danger stnkm-badge">M: ${props.stnkm.M*100}%</span>
+            </div>
+            <div class="stnkm-task-list">
+              ${taskS}${taskN}${taskK}
+              ${(!taskS && !taskN && !taskK) ? '<div class="text-muted text-center small py-3"><i class="fa-regular fa-circle-check fa-2x mb-2 text-success"></i><br>Seluruh baseline prioritas STNKM sudah optimal. Lanjutkan penguatan materi sesuai modul.</div>' : ''}
+            </div>
+          </div>`;
+      }
+      
+      let btnLampiranHtml = props.lampiran ? `<a href="${props.lampiran}" target="_blank" class="btn btn-sm btn-outline-primary w-100 fw-bold mt-2 shadow-sm"><i class="fa-solid fa-cloud-arrow-down me-2"></i>Buka / Unduh Dokumen Pendukung</a>` : '';
+      
+      // Modul Quick Actions (Presensi, Nilai, Jurnal)
+      let todoHtml = `<div class="mt-4 border-top pt-3"><h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-bolt text-warning me-2"></i>Eksekusi Aksi Cepat</h6>
+        <button class="btn btn-light border w-100 text-start mb-2 quick-action-btn shadow-sm" onclick="lompatKe('presensi', '${props.kelasId}', '', '${tglIso}')"><i class="fa-solid fa-user-check text-success me-2"></i> Isi Presensi Kelas</button>
+        <button class="btn btn-light border w-100 text-start mb-2 quick-action-btn shadow-sm" onclick="lompatKe('harian', '${props.kelasId}', '${props.mapelId}', '${tglIso}')"><i class="fa-solid fa-keyboard text-info me-2"></i> Input Nilai (Harian/TDU)</button>
+        <button class="btn btn-light border w-100 text-start quick-action-btn shadow-sm" onclick="lompatKe('jurnal', '${props.kelasId}', '${props.mapelId}', '${tglIso}')"><i class="fa-solid fa-pen-nib text-primary me-2"></i> Tulis Jurnal Observasi</button>
+      </div>`;
+      
+      // Aksi Edit & Hapus
+      let isOwner = cUser.role === 'guru' && props.guruId === cUser.username;
+      let canEdit = isAdmin || isOwner;
+      let actionHtml = canEdit ? `<div class="mt-4 pt-3 border-top d-flex gap-2"><button class="btn btn-sm btn-outline-secondary w-50 fw-bold shadow-sm" onclick="editJadwal('${info.event.id}')"><i class="fa-solid fa-pen me-1"></i> Edit Jadwal</button><button class="btn btn-sm btn-outline-danger w-50 fw-bold shadow-sm" onclick="hapusJadwal('${info.event.id}')"><i class="fa-solid fa-trash me-1"></i> Hapus</button></div>` : '';
+
+      // Render Keseluruhan Panel Detail
+      document.getElementById('detailKonten').innerHTML = `
+        <div class="mb-3 pb-2 border-bottom border-3" style="border-color: ${info.event.backgroundColor} !important;">
+          <span class="badge bg-dark mb-2">${props.status}</span>
+          <h5 class="fw-bold text-dark mb-1">${props.mapel}</h5>
+          <div class="text-primary fw-bold small">${props.materiTopik}</div>
+        </div>
+        <div class="d-flex align-items-center mb-2 text-muted small"><i class="fa-solid fa-calendar-day me-2"></i><strong>${tglStr}</strong></div>
+        <div class="d-flex align-items-center mb-2 text-muted small"><i class="fa-regular fa-clock me-2"></i>${waktu}</div>
+        <div class="d-flex align-items-center mb-2 text-muted small"><i class="fa-solid fa-user-tie me-2"></i>${props.guru}</div>
+        <div class="d-flex align-items-center mb-2 text-muted small"><i class="fa-solid fa-door-open me-2"></i>${props.ruangan} | Kelas: ${props.kelas}</div>
+        
+        <div class="mt-3">
+          <div class="small fw-bold text-muted mb-1"><i class="fa-solid fa-box-open me-1"></i> Catatan & Persiapan Media:</div>
+          <p class="small text-dark p-2 rounded bg-warning bg-opacity-10 border border-warning">${props.catatanBersih || '<i>Tidak ada persiapan khusus.</i>'}</p>
+          ${btnLampiranHtml}
+        </div>
+        
+        ${stnkmHtml}
+        ${todoHtml}
+        ${actionHtml}
+      `;
+    }
+
+    function tutupPanelKanan() { document.getElementById('panelRight').classList.add('hidden'); }
+
+    function eksekusiUpdateBerantai(mode, record, tglAcuan, deltaMs = null, revertCallback = null) {
+        Swal.fire({title: 'Menyimpan Perubahan...', toast: true, position: 'top-end', showConfirmButton: false});
+        google.script.run
+            .withSuccessHandler(r => {
+               if (r.success) {
+                  Swal.fire({title: 'Tersimpan!', toast: true, position: 'top-end', icon: 'success', showConfirmButton: false, timer: 1500});
+                  let modalEl = document.getElementById('modalJadwal'); if(modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
+                  document.getElementById('formJadwal').reset(); tutupPanelKanan();
+                  google.script.run.withSuccessHandler(newData => { DB = newData; terapkanFilter(); }).getRelationalData();
+               } else { Swal.fire('Gagal', r.message, 'error'); if(revertCallback) revertCallback(); }
+            })
+            .withFailureHandler(err => { Swal.fire('Error', err.message, 'error'); if(revertCallback) revertCallback(); })
+            .updateJadwalBerantai(mode, record, tglAcuan, deltaMs);
+    }
+
+    function editJadwal(id) {
+       let record = (DB.TransJadwal || []).find(j => j.id_jadwal === id);
+       if (!record) return;
+
+       editJadwalId = id; 
+       document.getElementById('modalJadwalTitle').innerHTML = '<i class="fa-solid fa-pen me-2"></i>Edit Jadwal';
+       document.getElementById('j_guru').value = record.id_guru;
+       document.getElementById('j_ruangan').value = record.id_ruangan || '';
+       document.getElementById('j_mapel').value = record.id_mapel;
+       document.getElementById('j_materi').value = record.id_materi;
+       document.getElementById('j_status').value = record.status_sesi || 'Menunggu';
+       
+       let partsData = (record.persiapan_khusus || "").split('|');
+       let hex = partsData[0] && partsData[0].startsWith('#') ? partsData[0] : '#3f51b5';
+       document.getElementById('j_warna').value = hex;
+       document.getElementById('j_persiapan').value = partsData[1] || ''; 
+       existingUrlLampiran = partsData[2] || ''; 
+       
+       document.querySelectorAll('.color-option').forEach(el => {
+          if(el.style.backgroundColor === hex || el.style.backgroundColor === hexToRgb(hex)) { el.classList.add('selected'); } 
+          else { el.classList.remove('selected'); }
+       });
+       
+       let safeStart = parseSafeDate(record.tanggal_mulai); let safeEnd = parseSafeDate(record.tanggal_selesai);
+       if(safeStart) document.getElementById('j_mulai').value = safeStart.slice(0, 16);
+       if(safeEnd) document.getElementById('j_selesai').value = safeEnd.split('T')[1].slice(0, 5);
+
+       document.getElementById('areaPeriodisitas').style.display = 'none';
+       document.getElementById('btnSimpanJadwal').innerHTML = '<i class="fa-solid fa-save me-2"></i> Perbarui Jadwal';
+       tutupPanelKanan();
+       new bootstrap.Modal(document.getElementById('modalJadwal')).show();
+    }
+
+    function hapusJadwal(id) {
+       let record = (DB.TransJadwal || []).find(j => j.id_jadwal === id);
+       if (!record) return;
+
+       if (record.id_group) {
+           Swal.fire({
+               title: 'Hapus Jadwal Berulang',
+               html: `<div class="text-start mt-3"><div class="form-check mb-2"><input class="form-check-input" type="radio" name="delMode" id="del1" value="only_this" checked><label class="form-check-label" for="del1">Hanya jadwal ini</label></div><div class="form-check mb-2"><input class="form-check-input" type="radio" name="delMode" id="del2" value="following"><label class="form-check-label" for="del2">Jadwal ini dan selanjutnya</label></div><div class="form-check"><input class="form-check-input" type="radio" name="delMode" id="del3" value="all"><label class="form-check-label text-danger fw-bold" for="del3">Semua jadwal dalam rangkaian ini (File Drive ikut dihapus)</label></div></div>`,
+               icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Eksekusi Hapus'
+           }).then(res => {
+               if (res.isConfirmed) {
+                   let mode = document.querySelector('input[name="delMode"]:checked').value;
+                   eksekusiHapusBerantai(mode, id, record.id_group, record.tanggal_mulai);
+               }
+           });
+       } else {
+           Swal.fire({title: 'Hapus Jadwal?', text: 'Jadwal dan lampiran Drive-nya dihapus permanen.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Ya, Hapus'
+           }).then(res => { if (res.isConfirmed) eksekusiHapusBerantai('only_this', id, null, null); });
+       }
+    }
+
+    function eksekusiHapusBerantai(mode, idJadwal, idGroup, tglMulai) {
+        Swal.fire({title: 'Menghapus...', toast: true, position: 'top-end', showConfirmButton: false});
+        google.script.run
+            .withSuccessHandler(r => {
+               if (r.success) {
+                  Swal.fire({title: 'Dihapus!', toast: true, position: 'top-end', icon: 'success', showConfirmButton: false, timer: 1500});
+                  tutupPanelKanan();
+                  google.script.run.withSuccessHandler(newData => { DB = newData; terapkanFilter(); }).getRelationalData();
+               } else { Swal.fire('Gagal', r.message, 'error'); }
+            })
+            .withFailureHandler(err => Swal.fire('Error', err.message, 'error'))
+            .deleteJadwalBerantai(mode, idJadwal, idGroup, tglMulai);
+    }
+
+    // Tambahkan parameter tglKlik dari dateClick
+    function bukaModalJadwalBaru(tglKlik = null) {
+       editJadwalId = null; existingUrlLampiran = "";
+       document.getElementById('modalJadwalTitle').innerHTML = '<i class="fa-solid fa-calendar-plus me-2"></i>Plotting Jadwal Baru';
+       document.getElementById('formJadwal').reset();
+       document.getElementById('areaPeriodisitas').style.display = 'block'; 
+       toggleRepeatOptions();
+       document.getElementById('btnSimpanJadwal').innerHTML = 'Simpan Jadwal';
+       
+       // Jika dipanggil dari klik grid bulan/hari
+       if(tglKlik) {
+           let target = tglKlik.includes('T') ? tglKlik.slice(0,16) : tglKlik + "T07:00";
+           document.getElementById('j_mulai').value = target;
+       }
+
+       // Kunci otomatis dropdown guru jika yang login bukan admin
+       let elGuru = document.getElementById('j_guru');
+       if (!isAdmin) {
+           elGuru.value = cUser.username;
+           elGuru.style.pointerEvents = 'none'; // Cegah ganti guru lain
+           elGuru.classList.add('bg-light');
+       }
+       new bootstrap.Modal(document.getElementById('modalJadwal')).show();
+    }
+
+    function populateModalDropdowns() {
+      let optGuru = '<option value="">- Pilih Guru -</option>';
+      (DB.MasterGuru||[]).forEach(g => optGuru += `<option value="${g.id_guru}">${g.nama_guru}</option>`);
+      document.getElementById('j_guru').innerHTML = optGuru;
+
+      let optRuangan = '<option value="">- Pilih Ruangan -</option>';
+      (DB.MasterRuangan||[]).forEach(r => optRuangan += `<option value="${r.id_ruangan}">${r.nama_ruangan}</option>`);
+      document.getElementById('j_ruangan').innerHTML = optRuangan;
+
+      let optMapel = '<option value="">- Pilih Mata Pelajaran -</option>';
+      (DB.MasterMapel||[]).forEach(m => {
+        let guru = (DB.MasterGuru||[]).find(g => String(g.id_guru) === String(m.id_guru));
+        let namaGuru = guru ? guru.nama_guru : m.id_guru;
+        optMapel += `<option value="${m.id_mapel}">${m.nama_mapel} - ${namaGuru}</option>`;
+      });
+      document.getElementById('j_mapel').innerHTML = optMapel;
+
+      let optMateri = '<option value="">- Pilih Topik / Materi -</option>';
+      (DB.MasterMateri||[]).forEach(m => optMateri += `<option value="${m.id_materi}">${m.nama_materi}</option>`);
+      document.getElementById('j_materi').innerHTML = optMateri;
+    }
+
+    function handleSubmitJadwal(e) {
+       e.preventDefault();
+       let fileInput = document.getElementById('j_file').files[0];
+       
+       if (fileInput) {
+          showL("Mengunggah Lampiran ke Drive...");
+          let reader = new FileReader();
+          reader.onload = function(evt) {
+             let base64 = evt.target.result.split(',')[1];
+             google.script.run
+               .withSuccessHandler(function(res) {
+                  if(res.success) {
+                     existingUrlLampiran = res.url; hideL(); prosesSimpanUtama(); 
+                  } else { hideL(); Swal.fire('Error Upload', res.message, 'error'); }
+               })
+               .uploadFileToDrive(base64, fileInput.name, fileInput.type);
+          };
+          reader.readAsDataURL(fileInput);
+       } else { prosesSimpanUtama(); }
+    }
+
+    function prosesSimpanUtama() {
+      let btn = document.getElementById('btnSimpanJadwal');
+      btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
+
+      let idMateri = document.getElementById('j_materi').value;
+      let materiObj = DB.MasterMateri?.find(m => m.id_materi === idMateri);
+      let warna = document.getElementById('j_warna').value;
+      let teksPersiapan = document.getElementById('j_persiapan').value;
+      let gabunganPersiapan = warna + '|' + teksPersiapan + '|' + existingUrlLampiran;
+
+      let rawMulai = document.getElementById('j_mulai').value; 
+      let rawSelesaiTime = document.getElementById('j_selesai').value; 
+      let tglDasar = rawMulai.split('T')[0];
+      
+      let record = {
+        id_guru: document.getElementById('j_guru').value,
+        id_mapel: document.getElementById('j_mapel').value,
+        id_materi: idMateri,
+        id_kelas: materiObj ? materiObj.id_kelas : "",
+        id_periode: (DB.MasterPeriode?.find(p => p.status_aktif === 'AKTIF')?.id_periode) || '',
+        id_ruangan: document.getElementById('j_ruangan').value,
+        tanggal_mulai: rawMulai,
+        tanggal_selesai: tglDasar + "T" + rawSelesaiTime,
+        persiapan_khusus: gabunganPersiapan, 
+        status_sesi: document.getElementById('j_status').value
+      };
+
+      if (editJadwalId) {
+         let oldData = DB.TransJadwal.find(j => j.id_jadwal === editJadwalId);
+         record.id_jadwal = editJadwalId; record.id_group = oldData.id_group || "";
+
+         if (record.id_group) {
+             Swal.fire({
+                 title: 'Simpan Perubahan Jadwal',
+                 html: `<div class="text-start mt-3"><div class="form-check mb-2"><input class="form-check-input" type="radio" name="editMode" id="edit1" value="only_this" checked><label class="form-check-label" for="edit1">Hanya jadwal ini (Pengecualian)</label></div><div class="form-check mb-2"><input class="form-check-input" type="radio" name="editMode" id="edit2" value="following"><label class="form-check-label" for="edit2">Jadwal ini dan selanjutnya</label></div><div class="form-check"><input class="form-check-input" type="radio" name="editMode" id="edit3" value="all"><label class="form-check-label fw-bold" for="edit3">Semua jadwal dalam rangkaian ini</label></div></div>`,
+                 icon: 'question', showCancelButton: true, confirmButtonText: 'Simpan'
+             }).then(res => {
+                 if (res.isConfirmed) {
+                     let mode = document.querySelector('input[name="editMode"]:checked').value;
+                     eksekusiUpdateBerantai(mode, record, oldData.tanggal_mulai);
+                 } else { btn.disabled = false; btn.innerHTML = 'Perbarui Jadwal'; }
+             });
+         } else { eksekusiUpdateBerantai('only_this', record, null); }
+
+      } else {
+         let repeatType = document.getElementById('j_ulangi').value;
+         let arrRecords = [];
+         let startBase = new Date(rawMulai); 
+
+         if (repeatType === '1') {
+            record.id_jadwal = "JDW-" + new Date().getTime(); record.id_group = ""; arrRecords.push(record);
+         } else {
+            let dAkhirStr = document.getElementById('j_batas_akhir').value;
+            if(!dAkhirStr) { alert("Pilih Batas Akhir Tanggal!"); btn.disabled = false; btn.innerHTML = 'Simpan Jadwal'; return; }
+            
+            let endLimit = new Date(dAkhirStr + "T23:59:00");
+            let targetDays = [];
+            
+            if (repeatType === 'harian') { targetDays = [0,1,2,3,4,5,6]; } 
+            else if (repeatType === 'kustom') {
+                document.querySelectorAll('.day-checkbox:checked').forEach(cb => targetDays.push(parseInt(cb.value)));
+                if(targetDays.length === 0) { alert("Pilih minimal 1 hari!"); btn.disabled = false; btn.innerHTML = 'Simpan Jadwal'; return; }
+            }
+
+            let newGroupId = "GRP-" + new Date().getTime();
+            
+            // KUNCI PERBAIKAN: Looping Hari Murni (Tanpa Zona Waktu)
+            let currentLoop = new Date(startBase.getFullYear(), startBase.getMonth(), startBase.getDate()); 
+            let endTimeObj = new Date(endLimit.getFullYear(), endLimit.getMonth(), endLimit.getDate());
+            let i = 0;
+            // Definisi Parameter Hari Kerja Sistem (1 = Senin, ..., 6 = Sabtu)
+            // Indeks 0 (Minggu) sengaja diabaikan.
+            const sistemHariKerja = [1, 2, 3, 4, 5, 6]; 
+      
+            // Saat melakukan iterasi tanggal dari awal sampai akhir batas pengulangan:
+            while(currentLoop <= endTimeObj) {
+                let dayOfWeek = currentLoop.getDay(); // 0(Minggu) hingga 6(Sabtu)
+                let js_wd = currentLoop.getDay(); // 0 (Minggu) s/d 6 (Sabtu)
+
+                // Jika mode "Harian", filter agar hanya memplot di hari kerja yang diizinkan (skip Minggu)
+                if (modePeriodisitas === 'harian' && !sistemHariKerja.includes(js_wd)) {
+                    currentLoop.setDate(currentLoop.getDate() + 1);
+                    continue;
+                }
+
+                if (targetDays.includes(dayOfWeek)) {
+                    let cloneRec = { ...record };
+                    cloneRec.id_jadwal = "JDW-" + new Date().getTime() + "-" + i;
+                    
+                    let y = currentLoop.getFullYear();
+                    let m = String(currentLoop.getMonth() + 1).padStart(2, '0');
+                    let d = String(currentLoop.getDate()).padStart(2, '0');
+                    
+                    let timeStart = rawMulai.split('T')[1];
+                    
+                    cloneRec.tanggal_mulai = `${y}-${m}-${d}T${timeStart}`; 
+                    cloneRec.tanggal_selesai = `${y}-${m}-${d}T${rawSelesaiTime}`; 
+                    cloneRec.id_group = newGroupId;
+                    arrRecords.push(cloneRec);
+                    i++;
+                }
+                currentLoop.setDate(currentLoop.getDate() + 1); 
+            }
+         }
+
+         if(arrRecords.length === 0) { Swal.fire('Info', 'Tidak ada tanggal yang sesuai di dalam rentang waktu tersebut.', 'info'); btn.disabled = false; btn.innerHTML = 'Simpan Jadwal'; return; }
+
+         showL(`Menyimpan ${arrRecords.length} Jadwal...`);
+         let successCount = 0;
+         arrRecords.forEach((rec) => {
+            google.script.run
+            .withSuccessHandler(res => {
+               successCount++;
+               if(successCount === arrRecords.length) {
+                  btn.disabled = false; btn.innerHTML = 'Simpan Jadwal'; hideL();
+                  bootstrap.Modal.getInstance(document.getElementById('modalJadwal')).hide();
+                  Swal.fire({toast:true, position:'top-end', icon:'success', title:`${successCount} Jadwal Tersimpan!`, showConfirmButton:false, timer:2000});
+                  google.script.run.withSuccessHandler(newData => { DB = newData; terapkanFilter(); }).getRelationalData();
+               }
+            })
+            .saveMasterData('TransJadwal', rec, 'id_jadwal');
+         });
+      }
+    }
+
+    function handleDropEvent(info) {
+       let oldData = (DB.TransJadwal || []).find(j => j.id_jadwal === info.event.id);
+       if(oldData) {
+
+           // PROTEKSI KEPEMILIKAN
+           if (!isAdmin && oldData.id_guru !== cUser.username) {
+               Swal.fire('Ditolak', 'Anda hanya bisa menggeser jadwal Anda sendiri.', 'warning');
+               info.revert();
+               return;
+           }
+            
+           let start = info.event.start; let end = info.event.end || new Date(start.getTime() + 60*60*1000);
+           
+           // HITUNG SELISIH WAKTU (DELTA TIME)
+           let originalDate = new Date(oldData.tanggal_mulai);
+           if(isNaN(originalDate.getTime())) originalDate = new Date(String(oldData.tanggal_mulai).split('T')[0]);
+           let deltaMs = start.getTime() - originalDate.getTime();
+
+           let record = { ...oldData };
+           record.tanggal_mulai = new Date(start.getTime() - (start.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+           record.tanggal_selesai = new Date(end.getTime() - (end.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+
+           if(oldData.id_group) {
+              Swal.fire({
+                 title: 'Pindahkan Jadwal',
+                 html: `<div class="text-start mt-3"><div class="form-check mb-2"><input class="form-check-input" type="radio" name="editMode" id="drop1" value="only_this" checked><label class="form-check-label" for="drop1">Pindahkan HANYA jadwal ini</label></div><div class="form-check mb-2"><input class="form-check-input" type="radio" name="editMode" id="drop2" value="following"><label class="form-check-label" for="drop2">Geser jam dan hari untuk jadwal ini dan selanjutnya secara paralel</label></div><div class="form-check"><input class="form-check-input" type="radio" name="editMode" id="drop3" value="all"><label class="form-check-label fw-bold" for="drop3">Geser jam dan hari untuk SEMUA jadwal di rangkaian ini secara paralel</label></div></div>`,
+                 icon: 'info', showCancelButton: true, confirmButtonText: 'Terapkan'
+              }).then(res => {
+                 if(res.isConfirmed) {
+                     let mode = document.querySelector('input[name="editMode"]:checked').value;
+                     eksekusiUpdateBerantai(mode, record, oldData.tanggal_mulai, deltaMs, () => info.revert());
+                 } else { info.revert(); }
+              });
+           } else { eksekusiUpdateBerantai('only_this', record, null, null, () => info.revert()); }
+       }
+    }
+
+    function hexToRgb(hex) {
+      let bigint = parseInt(hex.substring(1), 16);
+      return `rgb(${(bigint >> 16) & 255}, ${(bigint >> 8) & 255}, ${bigint & 255})`;
+    }
+
+    window.onload = initApp;
+  </script>
+</body>
+
+</html>
