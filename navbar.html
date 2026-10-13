@@ -248,13 +248,14 @@
         let guardStyle = document.createElement('style');
         guardStyle.textContent = 'body > *:not(.swal2-container) { visibility: hidden !important; }';
         document.head.appendChild(guardStyle);
-        const goDashboard = () => { window.top.location.href = SCRIPT_URL + "?page=dashboard"; };
+        // Sandbox Apps Script hanya mengizinkan pindah halaman (window.top) setelah
+        // tindakan pengguna (klik). Timer otomatis diblokir browser, jadi wajib klik.
         Swal.fire({
           icon: 'error', title: 'Akses Ditolak',
-          text: 'Peran Anda tidak memiliki akses ke halaman ini. Mengalihkan ke Dashboard...',
-          timer: 2500, timerProgressBar: true, allowOutsideClick: false
-        }).then(goDashboard);
-        setTimeout(goDashboard, 4000); // cadangan jika pesan gagal tampil
+          text: 'Peran Anda tidak memiliki akses ke halaman ini.',
+          confirmButtonText: '<i class="fa-solid fa-house me-1"></i> Kembali ke Dashboard',
+          allowOutsideClick: false, allowEscapeKey: false
+        }).then(() => { window.top.location.href = SCRIPT_URL + "?page=dashboard"; });
         return;
       }
       if (currentPage === 'profil') currentPage = 'dashboard'; 
