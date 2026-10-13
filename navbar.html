@@ -202,7 +202,7 @@
       }
     } else if (role === 'siswa') {
       // Siswa hanya boleh melihat Dashboard/Profil (sembunyikan seluruh menu operasional guru)
-      ['nav_master', 'nav_harian', 'nav_presensi', 'nav_jurnal', 'nav_catatan_p5', 'navbarDropdownRapor'].forEach(hideNavItem);
+      ['nav_master', 'navbarDropdownNilai', 'nav_presensi', 'nav_jurnal', 'nav_catatan_p5', 'navbarDropdownRapor', 'nav_log_aktivitas'].forEach(hideNavItem);
     } else if (role === 'kepsek') {
       // Kepala Sekolah memiliki akses monitoring semua kelas dan pencetakan,
       // opsi: sembunyikan konfigurasi teknis data master institusi jika diperlukan
@@ -211,12 +211,44 @@
     // Catatan: Role 'admin' tidak difilter sehingga mendapatkan akses penuh ke semua menu.
 
     // -------------------------------------------------------------
+    // 1b. PENJAGA HALAMAN (cegah akses lewat ketik ?page=... di URL)
+    // Aturannya sama dengan filter menu di atas. Catatan: ini lapis
+    // kenyamanan di browser; penjaga sebenarnya akan ada di server (token sesi).
+    // -------------------------------------------------------------
+    const PAGE_ACCESS = {
+      siswa: ['dashboard', 'profil'],
+      guruBukanWali: { blocked: ['log_aktivitas', 'rapor', 'rapor_p5', 'catatan_p5', 'laporan_stnkm'] },
+      guru: { blocked: ['log_aktivitas'] }
+    };
+
+    function isPageAllowed(page) {
+      if (role === 'siswa') return PAGE_ACCESS.siswa.includes(page);
+      if (role === 'guru') {
+        let rule = user.is_wali_kelas ? PAGE_ACCESS.guru : PAGE_ACCESS.guruBukanWali;
+        return !rule.blocked.includes(page);
+      }
+      return true; // admin, kepsek & role lain: akses penuh (sama seperti filter menu)
+    }
+
+    // -------------------------------------------------------------
     // 2. HIGHLIGHT MENU AKTIF BERDASARKAN URL
     // -------------------------------------------------------------
     google.script.url.getLocation(function(location) {
       let currentPage = 'dashboard';
       if (location && location.parameter && location.parameter.page) {
         currentPage = location.parameter.page;
+      }
+
+      if (!user.role) {
+        window.top.location.href = SCRIPT_URL + "?page=login";
+        return;
+      }
+      if (!isPageAllowed(currentPage)) {
+        document.body.style.visibility = 'hidden';
+        Swal.fire('Akses Ditolak', 'Peran Anda tidak memiliki akses ke halaman ini.', 'error').then(() => {
+          window.top.location.href = SCRIPT_URL + "?page=dashboard";
+        });
+        return;
       }
       if (currentPage === 'profil') currentPage = 'dashboard'; 
       
